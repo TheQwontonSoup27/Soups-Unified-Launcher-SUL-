@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Soups Unified Launcher",
+  "version": "0.1.0",
+  "identifier": "app.soups.unifiedlauncher",
+  "build": {
+    "frontendDist": "../ui/dist",
+    "beforeDevCommand": "npm --prefix ../ui run build",
+    "beforeBuildCommand": "npm --prefix ../ui run build"
+  },
+  "app": {
+    "windows": [{ "title": "Soups Unified Launcher", "width": 1280, "height": 800, "minWidth": 900, "minHeight": 600 }],
+    "security": { "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:" }
+  },
+  "bundle": { "active": true, "targets": "all", "icon": ["icons/icon.ico", "icons/icon.png"] }
+}

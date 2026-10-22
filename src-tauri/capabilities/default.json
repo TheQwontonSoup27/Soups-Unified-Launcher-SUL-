@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Least privilege: the UI may call our own commands only. No fs/shell/http plugins are granted.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

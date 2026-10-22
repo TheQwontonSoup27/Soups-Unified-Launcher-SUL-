@@ -1,0 +1,8 @@
+target/
+node_modules/
+ui/dist/
+*.log
+# never commit game files or secrets
+*.env
+src-tauri/target/
+src-tauri/gen/

@@ -1,0 +1,15 @@
+[package]
+name = "sul-core"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+thiserror = "1"
+
+[dev-dependencies]
+tempfile = "3"
