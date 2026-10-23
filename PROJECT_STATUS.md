@@ -40,6 +40,15 @@ NOT verified: title-bar window buttons inside the real Tauri window (browser pre
 Wallpaper JPEGs are git-ignored on purpose: the repo is public and the pictures' licences are unconfirmed (one has a third-party watermark,
 five are only 480x299). The gallery shows empty on a fresh clone until the files are dropped into `ui/public/wallpapers/`.
 
+## Discord, Steam library and references (2026-10-23)
+Built: Discord Rich Presence over Discord's documented IPC (`crates/sul-core/src/discord.rs`, off by default, global toggle in the title bar,
+unsupported / not-investigated games never publish; setup in docs/discord.md); read-only Steam library scanner and `steam://` launch URL
+(`crates/sul-core/src/steam.rs`, no Steam password involved); licence review of the reference repos (docs/references.md); design note on keeping a
+managed legacy build outside Steam's update reach (docs/steam-and-updates.md).
+Verified here: UI builds and UI tests pass (Linux container). Rust additions are NOT verified until CI runs `cargo test --workspace` on Windows.
+Not verified: Discord against a live Discord client; any of this against a real Steam install; Helldivers 2 7.1.1 behaviour (still Not investigated).
+Wallpaper licences: no reverse-image-search tool is available to the authoring session, so none could be confirmed public domain.
+
 ## Next action
 1. Launch the desktop app on Windows (`npx tauri dev`) and report what you see.
 2. Then build the Helldivers 2 Build Manager slice: import an install, hash it, isolated copy, verify, launch tracking.

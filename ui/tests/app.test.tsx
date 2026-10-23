@@ -39,3 +39,23 @@ test("shell shows the title bar with the app icon", () => {
   assert.match(html, /class="titlebar"/);
   assert.match(html, /titlebar-icon/);
 });
+
+import { setPresence, loadPresenceWanted } from "../src/discord";
+
+test("Discord presence is off by default and the toggle is in the title bar", () => {
+  assert.equal(loadPresenceWanted(), false);
+  const html = renderToString(<App splashMs={0} />);
+  assert.match(html, /Discord presence: Off/);
+});
+
+test("setPresence: preview mode, success, and error paths", async () => {
+  assert.deepEqual(await setPresence(false, null), { on: false, message: "" });
+  assert.equal((await setPresence(true, null)).on, true);
+  assert.match((await setPresence(true, null)).message, /Preview only/);
+  assert.deepEqual(await setPresence(true, async () => "on"), { on: true, message: "" });
+  assert.deepEqual(await setPresence(false, async () => "off"), { on: false, message: "" });
+  const failed = await setPresence(true, async () => { throw "Discord does not appear to be running"; });
+  assert.deepEqual(failed, { on: false, message: "Discord does not appear to be running" });
+  const weird = await setPresence(true, async () => { throw new Error("x"); });
+  assert.equal(weird.on, false);
+});

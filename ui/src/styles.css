@@ -67,3 +67,8 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .dialog h3 { margin:0 0 8px; } .dialog-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
 
 @media (max-width:760px){ .shell{grid-template-columns:1fr; grid-template-rows:40px auto 1fr;} .titlebar{grid-column:1;} .sidebar{flex-direction:row;overflow-x:auto;} .legend div{grid-template-columns:1fr;} .titlebar-note{display:none;} }
+
+.presence { display:inline-flex; align-items:center; gap:8px; margin-left:12px; }
+.presence-btn { background:transparent; color:var(--titlebar-text); border:1px solid currentColor; border-radius:999px; padding:2px 12px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.presence-btn.on { background:var(--button); color:var(--button-text); border-color:var(--button-text); }
+.presence-msg { font-size:12px; max-width:340px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

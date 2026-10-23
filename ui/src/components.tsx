@@ -1,8 +1,9 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Status } from "./types";
 import { STATUS_HELP, STATUS_LABEL } from "./capabilities";
 import { useSettings } from "./settings";
 import { isVideoType } from "./background";
+import { getInvoker, loadPresenceWanted, savePresenceWanted, setPresence } from "./discord";
 
 export function StatusBadge({ status }: { status: Status }) {
   return (
@@ -34,6 +35,29 @@ function showControls(): boolean {
   return new URLSearchParams(window.location.search).get("desktop") === "1"; // design preview in a plain browser
 }
 
+/** Global Discord Rich Presence switch (spec: lives in the top-left global UI, off by default). */
+export function PresenceToggle() {
+  const [on, setOn] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (!loadPresenceWanted()) return;
+    void setPresence(true, getInvoker()).then((r) => { setOn(r.on); setMsg(r.message); if (!r.on) savePresenceWanted(false); });
+  }, []);
+  const flip = async () => {
+    const r = await setPresence(!on, getInvoker());
+    setOn(r.on); setMsg(r.message); savePresenceWanted(r.on);
+  };
+  return (
+    <span className="presence">
+      <button role="switch" aria-checked={on} className={on ? "presence-btn on" : "presence-btn"} onClick={() => void flip()}
+        title="Show what you are doing in Discord. Off by default; games that are not supported never publish.">
+        {`Discord presence: ${on ? "On" : "Off"}`}
+      </button>
+      {msg && <span className="presence-msg" role="status">{msg}</span>}
+    </span>
+  );
+}
+
 export function TitleBar() {
   const controls = showControls();
   const win = controls ? tauriWindow() : null;
@@ -41,6 +65,7 @@ export function TitleBar() {
     <header className="titlebar" data-tauri-drag-region>
       <img className="titlebar-icon" src="logo.png" alt="" width={24} height={24} data-tauri-drag-region />
       <strong data-tauri-drag-region>Soups Unified Launcher</strong>
+      <PresenceToggle />
       <span className="titlebar-note" data-tauri-drag-region>Early development • no features are tested yet</span>
       {controls && (
         <div className="wincontrols">
