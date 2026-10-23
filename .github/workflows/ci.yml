@@ -32,5 +32,15 @@ jobs:
         working-directory: ui
       - run: npm run build
         working-directory: ui
-      - run: cargo check
+      - name: cargo check (errors surfaced as annotations)
         working-directory: src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo check --message-format=short 2>&1 | Tee-Object -FilePath check.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $lines = Get-Content check.log | Where-Object { $_ -match 'error|failed|not found|could not' } | Select-Object -First 12
+            foreach ($l in $lines) { Write-Host "::error::$($l -replace '[\r\n%]',' ')" }
+            exit $code
+          }
