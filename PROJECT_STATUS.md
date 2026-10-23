@@ -16,19 +16,18 @@
 - `ui`: `node build.mjs` succeeded; `tsx --test tests/*.test.ts tests/*.test.tsx` → 13 pass, 0 fail (Linux container, Node 22).
 - Screenshot check of Overview (dark) and Appearance (light): rendered, no console errors.
 
-## Verified in GitHub Actions (run 39761280234, commit d8f6e91)
-- `cargo test --workspace` step succeeded for `sul-core` on windows-latest and ubuntu-latest (job-level success; per-test output not read, log download blocked from the authoring session).
-- `ui` job succeeded (npm install, npm test, npm run build).
-- `cargo check` of the Tauri wrapper FAILED on both OSes; cause not yet read.
+## Verified in GitHub Actions (run 39880270552, commit e5a64b0, windows-latest only)
+- `core`: `cargo test --workspace` passed (sul-core unit/integration tests). Per-test output not read: raw log download is blocked from the authoring session, only job/step results are visible.
+- `ui`: `npm install`, `npm run typecheck`, `npm test`, `npm run build` all passed.
+- `tauri-shell`: `cargo check` of the desktop wrapper passed. The earlier failure was most likely the missing `src-tauri/icons` (placeholder icons added); the exact error was never read.
 - Decision 2026-10-22: Windows only for now. All Ubuntu CI jobs removed.
 
 ## NOT verified
-- Rust core on the next CI run (workflow changed to Windows-only; rerun pending).
-- **Tauri wrapper: `cargo check` failing in CI**, reason unread.
-- **TypeScript typecheck (`tsc --noEmit`) not run:** @types packages unavailable offline.
-- `ui` uses `npm install` in CI (no lockfile yet, could not generate one offline).
-- No game adapter exists. Helldivers 2 7.1.1 isolation/offline launch: not investigated.
+- The desktop app has never been launched (`tauri dev` / installer build not run). Only `cargo check` passed.
+- No real game install has been touched by any code. No game adapter exists.
+- Helldivers 2 7.1.1 isolation/offline launch: not investigated.
+- Icons are generated placeholders, not final branding.
 
 ## Next action
-1. Run `cargo test --workspace` and `npm install && npm test && npx tsc --noEmit` on a machine with network; fix whatever fails.
+1. Launch the desktop app on Windows (`npx tauri dev`) and report what you see.
 2. Then build the Helldivers 2 Build Manager slice: import an install, hash it, isolated copy, verify, launch tracking.
