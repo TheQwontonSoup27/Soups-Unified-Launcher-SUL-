@@ -17,7 +17,7 @@ test("only Appearance claims any support, and only partially", () => {
 });
 
 test("shell renders overview and every module nav entry", () => {
-  const html = renderToString(<App />);
+  const html = renderToString(<App splashMs={0} />);
   assert.match(html, /Soups Unified Launcher/);
   assert.match(html, /Keep every game version under control/);
   for (const m of MODULES) assert.ok(html.includes(m.title.replace(/&/g, "&amp;")), `nav missing ${m.title}`);
@@ -25,4 +25,17 @@ test("shell renders overview and every module nav entry", () => {
 
 test("every module page renders without throwing", () => {
   for (const m of MODULES) assert.ok(renderToString(<>{renderModule(m.id)}</>).length > 0);
+});
+
+test("splash shows the logo first when enabled", () => {
+  const html = renderToString(<App splashMs={1800} />);
+  assert.match(html, /class="splash"/);
+  assert.match(html, /logo\.png/);
+  assert.ok(!html.includes("Keep every game version"));
+});
+
+test("shell shows the title bar with the app icon", () => {
+  const html = renderToString(<App splashMs={0} />);
+  assert.match(html, /class="titlebar"/);
+  assert.match(html, /titlebar-icon/);
 });

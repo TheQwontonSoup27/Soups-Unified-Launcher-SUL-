@@ -1,8 +1,9 @@
 import { build, context } from "esbuild";
-import { mkdirSync, copyFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, cpSync, existsSync } from "node:fs";
 
 mkdirSync("dist", { recursive: true });
 copyFileSync("index.html", "dist/index.html");
+if (existsSync("public")) cpSync("public", "dist", { recursive: true });
 const opts = {
   entryPoints: ["src/main.tsx"],
   bundle: true,

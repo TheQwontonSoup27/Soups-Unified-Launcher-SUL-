@@ -1,7 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Least privilege: the UI may call our own commands only. No fs/shell/http plugins are granted.",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "Least privilege: core defaults plus only the window actions the custom title bar needs. No fs/shell/http plugins are granted.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
+  ]
 }

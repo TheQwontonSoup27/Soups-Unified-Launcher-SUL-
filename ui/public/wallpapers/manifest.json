@@ -1,0 +1,135 @@
+[
+ {
+  "id": "w01",
+  "name": "Dusk shoreline",
+  "file": "wallpapers/w01.jpg",
+  "thumb": "wallpapers/thumbs/w01.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w02",
+  "name": "Alpine lake boulder",
+  "file": "wallpapers/w02.jpg",
+  "thumb": "wallpapers/thumbs/w02.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w03",
+  "name": "Sierra lake sunset",
+  "file": "wallpapers/w03.jpg",
+  "thumb": "wallpapers/thumbs/w03.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w04",
+  "name": "Starry peak",
+  "file": "wallpapers/w04.jpg",
+  "thumb": "wallpapers/thumbs/w04.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w05",
+  "name": "Mossy forest light",
+  "file": "wallpapers/w05.jpg",
+  "thumb": "wallpapers/thumbs/w05.jpg",
+  "lowRes": true
+ },
+ {
+  "id": "w06",
+  "name": "Blue ice",
+  "file": "wallpapers/w06.jpg",
+  "thumb": "wallpapers/thumbs/w06.jpg",
+  "lowRes": true
+ },
+ {
+  "id": "w07",
+  "name": "Quiet lake dusk",
+  "file": "wallpapers/w07.jpg",
+  "thumb": "wallpapers/thumbs/w07.jpg",
+  "lowRes": true
+ },
+ {
+  "id": "w08",
+  "name": "Clear water kelp",
+  "file": "wallpapers/w08.jpg",
+  "thumb": "wallpapers/thumbs/w08.jpg",
+  "lowRes": true
+ },
+ {
+  "id": "w09",
+  "name": "Misty fjord",
+  "file": "wallpapers/w09.jpg",
+  "thumb": "wallpapers/thumbs/w09.jpg",
+  "lowRes": true
+ },
+ {
+  "id": "w10",
+  "name": "Maroon lake autumn",
+  "file": "wallpapers/w10.jpg",
+  "thumb": "wallpapers/thumbs/w10.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w11",
+  "name": "Lakeside castle",
+  "file": "wallpapers/w11.jpg",
+  "thumb": "wallpapers/thumbs/w11.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w12",
+  "name": "Orange lily",
+  "file": "wallpapers/w12.jpg",
+  "thumb": "wallpapers/thumbs/w12.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w13",
+  "name": "Autumn mountain reflection",
+  "file": "wallpapers/w13.jpg",
+  "thumb": "wallpapers/thumbs/w13.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w14",
+  "name": "Misty birches",
+  "file": "wallpapers/w14.jpg",
+  "thumb": "wallpapers/thumbs/w14.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w15",
+  "name": "River city incline",
+  "file": "wallpapers/w15.jpg",
+  "thumb": "wallpapers/thumbs/w15.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w16",
+  "name": "Alpine meadow peak",
+  "file": "wallpapers/w16.jpg",
+  "thumb": "wallpapers/thumbs/w16.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w17",
+  "name": "Beach at dawn",
+  "file": "wallpapers/w17.jpg",
+  "thumb": "wallpapers/thumbs/w17.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w18",
+  "name": "Glowing night rocks",
+  "file": "wallpapers/w18.jpg",
+  "thumb": "wallpapers/thumbs/w18.jpg",
+  "lowRes": false
+ },
+ {
+  "id": "w19",
+  "name": "Forest path",
+  "file": "wallpapers/w19.jpg",
+  "thumb": "wallpapers/thumbs/w19.jpg",
+  "lowRes": false
+ }
+]

@@ -6,3 +6,6 @@ ui/dist/
 *.env
 src-tauri/target/
 src-tauri/gen/
+# Wallpaper image files are NOT committed until their licenses are confirmed (manifest.json is).
+ui/public/wallpapers/*.jpg
+ui/public/wallpapers/thumbs/*.jpg

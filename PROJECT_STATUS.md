@@ -28,6 +28,18 @@
 - Helldivers 2 7.1.1 isolation/offline launch: not investigated.
 - Icons are generated placeholders, not final branding.
 
+## Branding and appearance (2026-10-23)
+Built: Team27 logo as app/window/tab icon (src-tauri/icons, ui/public); splash screen (logo centred on logo-purple, click or ~1.8 s to skip);
+custom borderless title bar (purple) with minimize / maximize / close; default Team27 theme (green app background, purple title bar,
+purple buttons with black text, green pop-ups); per-token colour editor with 4.5:1 contrast check; background chooser (solid, 19-picture gallery,
+or the user's own picture / GIF / video stored in IndexedDB) with readability dimming; 4 other theme presets.
+Verified here (Linux container, headless Chromium): `ui` builds, 23/23 UI tests pass, screenshots of splash, main window, Appearance,
+gallery background, custom GIF upload and pop-up dialog look as specified, no console errors.
+NOT verified: title-bar window buttons inside the real Tauri window (browser preview only); borderless window on Windows; video backgrounds
+(GIF/image tested, video not); typecheck of the new code and the Tauri permission names (CI `cargo check` / `npm run typecheck` decide).
+Wallpaper JPEGs are git-ignored on purpose: the repo is public and the pictures' licences are unconfirmed (one has a third-party watermark,
+five are only 480x299). The gallery shows empty on a fresh clone until the files are dropped into `ui/public/wallpapers/`.
+
 ## Next action
 1. Launch the desktop app on Windows (`npx tauri dev`) and report what you see.
 2. Then build the Helldivers 2 Build Manager slice: import an install, hash it, isolated copy, verify, launch tracking.
