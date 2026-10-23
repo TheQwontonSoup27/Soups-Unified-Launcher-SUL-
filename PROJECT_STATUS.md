@@ -16,9 +16,15 @@
 - `ui`: `node build.mjs` succeeded; `tsx --test tests/*.test.ts tests/*.test.tsx` → 13 pass, 0 fail (Linux container, Node 22).
 - Screenshot check of Overview (dark) and Appearance (light): rendered, no console errors.
 
+## Verified in GitHub Actions (run 39761280234, commit d8f6e91)
+- `cargo test --workspace` step succeeded for `sul-core` on windows-latest and ubuntu-latest (job-level success; per-test output not read, log download blocked from the authoring session).
+- `ui` job succeeded (npm install, npm test, npm run build).
+- `cargo check` of the Tauri wrapper FAILED on both OSes; cause not yet read.
+- Decision 2026-10-22: Windows only for now. All Ubuntu CI jobs removed.
+
 ## NOT verified
-- **Rust core: never compiled or tested.** The authoring container could not reach crates.io. First `cargo test --workspace` is outstanding (Windows PC or CI).
-- **Tauri wrapper: never compiled.** No webview libs in the container.
+- Rust core on the next CI run (workflow changed to Windows-only; rerun pending).
+- **Tauri wrapper: `cargo check` failing in CI**, reason unread.
 - **TypeScript typecheck (`tsc --noEmit`) not run:** @types packages unavailable offline.
 - `ui` uses `npm install` in CI (no lockfile yet, could not generate one offline).
 - No game adapter exists. Helldivers 2 7.1.1 isolation/offline launch: not investigated.

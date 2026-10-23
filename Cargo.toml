@@ -2,7 +2,7 @@
 resolver = "2"
 members = ["crates/sul-core"]
 # src-tauri is intentionally NOT a workspace member: it needs OS webview libs
-# (e.g. webkit2gtk on Linux) that CI/dev containers may lack. Build it from src-tauri/.
+# so core tests stay independent of the desktop wrapper. Build it from src-tauri/.
 exclude = ["src-tauri"]
 
 [workspace.package]
