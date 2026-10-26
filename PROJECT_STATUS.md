@@ -57,12 +57,15 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
   The legacy state is commit `9ece116`, tagged locally as `legacy-pre-step-1.5`. Pushing that tag was refused (HTTP 403) from the
   authoring session, so it is not on GitHub; see `docs/decisions/0002-step-1-5-consolidation.md`.
 
-## Wipeout (pending)
-Four legacy files are redundant and still tracked, because deleting them was blocked by the authoring session's permission system:
-`ui/build.mjs` (old esbuild script; esbuild is no longer a dependency), `ui/src/components.tsx` (replaced by `ui/src/components/`),
-`ui/src/overview.tsx` (replaced by `ui/src/views/GameLibrary.tsx` and `weakestStatus` in `ui/src/capabilities.ts`), and
-`ui/public/icon.svg` (unreferenced placeholder art). Redundancy check run: a copy of `ui/` without the first three typechecked,
-passed 33/33 UI tests and produced a bundle with the same content hashes as the full tree. `icon.svg` was checked by search only.
+## Wipeout (done 2026-10-26)
+Four legacy files were removed after checks showed the build does not use them: `ui/build.mjs` (old esbuild script; it would have
+written an inconsistent `dist/`), `ui/src/components.tsx` (replaced by `ui/src/components/`), `ui/src/overview.tsx` (replaced by
+`ui/src/views/GameLibrary.tsx` and `weakestStatus` in `ui/src/capabilities.ts`), and `ui/public/icon.svg` (unreferenced placeholder art).
+Checks: an import-graph walk from `index.html` and the tests found these were the only unreachable UI files; every Rust file is reachable
+through `mod` declarations; the UI bundle had identical content hashes with and without them.
+Left in place on purpose: the Windows Store icon sizes in `src-tauri/icons/` (standard `tauri icon` output, not referenced by
+`tauri.conf.json`), and the design-reference PNGs in `docs/design-references/` (`CLAUDE.md` and `PROJECT_SPEC.md` point at
+`design-references/` at the repo root, which does not exist; the path in those two files is the mismatch, not the images).
 
 ## Next action
 1. On Windows: `git fetch`, `git checkout main`, `npm install`, `cargo test --workspace`, `npm run dev`; report what you see.

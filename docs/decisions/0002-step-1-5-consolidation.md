@@ -23,8 +23,9 @@ portability, templates, Vite shell). Step 1.5 merged them on branch `step-1.5` i
 ## Outcome
 - 2026-10-26: `step-1.5` (04c968f) passed Windows CI (run 40276520399) and was fast-forwarded into `main` at the owner's request.
   `main` therefore contains the pre-merge history, so 9ece116 stays reachable.
-- Four redundant legacy files remained tracked afterwards (see `PROJECT_STATUS.md`, "Wipeout"); deleting them was blocked by the
-  authoring session's permission system and is left to the owner's go-ahead.
+- Four redundant legacy files (`ui/build.mjs`, `ui/src/components.tsx`, `ui/src/overview.tsx`, `ui/public/icon.svg`) stayed tracked
+  after the merge because the authoring session's permission system blocked the first deletion attempt. They were deleted on
+  2026-10-26 after the owner asked again; see `PROJECT_STATUS.md`, "Wipeout".
 
 ## Choices made while merging (not in the owner's list; reversible)
 - **Bundler: Vite**, from the scaffold, replacing the earlier esbuild script (`ui/build.mjs`). Tests keep the earlier `tsx --test` runner.
