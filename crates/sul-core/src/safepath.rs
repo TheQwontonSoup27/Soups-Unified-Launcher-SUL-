@@ -1,7 +1,9 @@
 //! Path safety: all managed writes must resolve inside an explicit root.
 
-use crate::{error::io, Error, Result};
 use std::path::{Component, Path, PathBuf};
+
+use crate::error::io;
+use crate::{Error, Result};
 
 /// Validate a manifest-style relative path (forward or back slashes accepted).
 /// Rejects absolute paths, drive prefixes, `..`, empty paths and NUL bytes.
@@ -56,4 +58,66 @@ pub fn join_within(root: &Path, rel: &str) -> Result<PathBuf> {
         }
     }
     Ok(full)
+}
+
+/// Resolve `path` as far as the filesystem allows, even if its tail does not exist yet.
+///
+/// The longest existing prefix is canonicalised (symlinks and `..` inside it are resolved by
+/// the OS); the remaining components are appended with `.` and `..` applied lexically, which
+/// is how Windows treats them before the filesystem is consulted. Use this to decide whether
+/// a *future* write location lies inside or outside a directory of interest.
+pub(crate) fn resolve_lenient(path: &Path) -> PathBuf {
+    let parts: Vec<Component> = path.components().collect();
+    for split in (1..=parts.len()).rev() {
+        let prefix: PathBuf = parts[..split].iter().collect();
+        let Ok(mut resolved) = prefix.canonicalize() else {
+            continue;
+        };
+        for part in &parts[split..] {
+            match part {
+                Component::ParentDir => {
+                    resolved.pop();
+                }
+                Component::CurDir => {}
+                other => resolved.push(other.as_os_str()),
+            }
+        }
+        return resolved;
+    }
+    path.to_path_buf()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_lenient_applies_parent_dirs_after_missing_components() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        std::fs::create_dir_all(root.join("a")).unwrap();
+
+        // `missing` does not exist, so the OS cannot resolve the `..`; we do it lexically.
+        assert_eq!(
+            resolve_lenient(
+                &root
+                    .join("a")
+                    .join("missing")
+                    .join("..")
+                    .join("..")
+                    .join("b")
+            ),
+            root.join("b")
+        );
+        // Existing prefix and trailing missing parts are kept as written.
+        assert_eq!(
+            resolve_lenient(&root.join("a").join("x").join("y")),
+            root.join("a").join("x").join("y")
+        );
+        // `..` through an existing directory is resolved by the OS.
+        assert_eq!(
+            resolve_lenient(&root.join("a").join("..").join("z")),
+            root.join("z")
+        );
+    }
 }

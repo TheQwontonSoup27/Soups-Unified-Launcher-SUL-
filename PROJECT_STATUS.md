@@ -1,54 +1,56 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-22
+**Last updated:** 2026-10-26 (Step 1.5: feature recovery and consolidation)
 
 ## Decisions made (owner approved)
-- Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (docs/decisions/0001-stack.md)
-- Still open: license, manifest schema migration policy, social/networking, Medal access level, first full game adapter.
+- Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
+- Step 1.5 (`docs/decisions/0002-step-1-5-consolidation.md`): the long-term `PROJECT_SPEC.md` governs; app identifier stays
+  `app.soups.unifiedlauncher`; the per-game tick-and-compatibility matrix is kept with the five status labels derived from it;
+  Discord small-image asset key is supported, a scale slider is not offered.
+- Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter.
 
-## Built this session
-- `crates/sul-core`: capability model with overclaim validation, safe relative paths, build manifests (scan/verify), protected roots + atomic write + isolated copy, recovery journal, redacting JSONL logger. Integration tests in `crates/sul-core/tests/core.rs`.
-- `ui/`: app shell, sidebar for 10 modules, theme tokens (4 presets), Overview and Appearance pages, placeholders for the rest.
-- `src-tauri/`: minimal wrapper with least-privilege capabilities.
-- `.github/workflows/ci.yml`, `docs/SETUP-WINDOWS.md`, `docs/capability-matrix/`.
+## What exists
+`crates/sul-core` (Rust): registry game scanner (Steam libraries on every drive, GOG, Uninstall keys, drive probing) behind
+`RegistryAccess` / `FileSystem` seams; per-game compatibility matrix with the five capability labels derived from it; persisted
+library index; storage isolator; baseline tracking and version self-updater with rollback; portable mode; JSON templates;
+capability model with the evidence rule; safe paths; protected roots, atomic write, isolated copy; recovery journal; redacting JSONL
+logger; SHA-256 build manifests; Discord Rich Presence over local IPC (opt-in); read-only Steam helpers (`steam://` launch URL,
+build id and update policy recorded, Steam-library guard).
+`src-tauri`: Tauri container, least-privilege capabilities, `app_info` and `discord_set_enabled` commands.
+`ui`: Vite + React shell with the Step 1 sidebar (Game Library first; Settings and General Playtime Tracker last), the ten
+roadmap modules as labelled placeholders, Team27 theme with contrast-checked token editor, backgrounds, borderless title bar,
+splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule.
 
-## Verified (actually run)
-- `ui`: `node build.mjs` succeeded; `tsx --test tests/*.test.ts tests/*.test.tsx` → 13 pass, 0 fail (Linux container, Node 22).
-- Screenshot check of Overview (dark) and Appearance (light): rendered, no console errors.
+## Verified (actually run, this session)
+Linux container, Node 22, cargo 1.97. Exact commands and results:
+- `cargo fmt --all -- --check` → clean.
+- `cargo clippy --workspace --all-targets -- -D warnings` → clean.
+- `cargo test --workspace` → 139 passed, 0 failed (105 `sul-core` unit tests, 13 in `tests/core.rs`, 15 in `tests/discord.rs`,
+  5 in `tests/steam.rs`, 1 in `sul-tauri`).
+- `npm run ui:typecheck` → clean. `npm run ui:test` → 33 passed, 0 failed. `npm run ui:build` → built (44 modules).
 
-## Verified in GitHub Actions (run 39880270552, commit e5a64b0, windows-latest only)
-- `core`: `cargo test --workspace` passed (sul-core unit/integration tests). Per-test output not read: raw log download is blocked from the authoring session, only job/step results are visible.
-- `ui`: `npm install`, `npm run typecheck`, `npm test`, `npm run build` all passed.
-- `tauri-shell`: `cargo check` of the desktop wrapper passed. The earlier failure was most likely the missing `src-tauri/icons` (placeholder icons added); the exact error was never read.
-- Decision 2026-10-22: Windows only for now. All Ubuntu CI jobs removed.
+## Verified earlier by the owner (before the merge, on the Step 1 archive, Windows)
+- Registry scanner archive: 78 tests passed and 38 games were mapped. That run predates this merge and used the scanner on its own.
+  Whether all 38 are correct, or whether games were missed, was not checked against a list.
 
 ## NOT verified
-- The desktop app has never been launched (`tauri dev` / installer build not run). Only `cargo check` passed.
-- No real game install has been touched by any code. No game adapter exists.
-- Helldivers 2 7.1.1 isolation/offline launch: not investigated.
-- Icons are generated placeholders, not final branding.
+- The merged branch has not been compiled or tested on Windows yet. The Windows-only adapters (`WindowsRegistry`, `FixedDrives`)
+  are compiled only there; this session's Linux container cannot build them. GitHub Actions on `windows-latest` is the first check.
+- The desktop app has not been launched from this branch (`npm run dev`). The borderless title-bar buttons and the move from
+  `withGlobalTauri` to `@tauri-apps/api` have never run inside a real Tauri window.
+- Discord against a live Discord client; any of this against a real game install beyond the owner's scan; no game adapter exists.
+- Helldivers 2 7.1.1 isolation/offline launch: Not investigated.
+- Icons are the Team27 set, not reviewed as final branding. Wallpaper JPEGs are git-ignored (licences unconfirmed; docs in
+  `ui/public/wallpapers/README.md`), so the gallery is empty on a fresh clone.
+- The Step 1 spec's persistent Steam credentials and Direct3D/Vulkan overlay hooks conflict with `CLAUDE.md` (no secrets in source or
+  logs, no anti-cheat bypass); not started, to be settled when those steps come up.
 
-## Branding and appearance (2026-10-23)
-Built: Team27 logo as app/window/tab icon (src-tauri/icons, ui/public); splash screen (logo centred on logo-purple, click or ~1.8 s to skip);
-custom borderless title bar (purple) with minimize / maximize / close; default Team27 theme (green app background, purple title bar,
-purple buttons with black text, green pop-ups); per-token colour editor with 4.5:1 contrast check; background chooser (solid, 19-picture gallery,
-or the user's own picture / GIF / video stored in IndexedDB) with readability dimming; 4 other theme presets.
-Verified here (Linux container, headless Chromium): `ui` builds, 23/23 UI tests pass, screenshots of splash, main window, Appearance,
-gallery background, custom GIF upload and pop-up dialog look as specified, no console errors.
-NOT verified: title-bar window buttons inside the real Tauri window (browser preview only); borderless window on Windows; video backgrounds
-(GIF/image tested, video not); typecheck of the new code and the Tauri permission names (CI `cargo check` / `npm run typecheck` decide).
-Wallpaper JPEGs are git-ignored on purpose: the repo is public and the pictures' licences are unconfirmed (one has a third-party watermark,
-five are only 480x299). The gallery shows empty on a fresh clone until the files are dropped into `ui/public/wallpapers/`.
-
-## Discord, Steam library and references (2026-10-23)
-Built: Discord Rich Presence over Discord's documented IPC (`crates/sul-core/src/discord.rs`, off by default, global toggle in the title bar,
-unsupported / not-investigated games never publish; setup in docs/discord.md); read-only Steam library scanner and `steam://` launch URL
-(`crates/sul-core/src/steam.rs`, no Steam password involved); licence review of the reference repos (docs/references.md); design note on keeping a
-managed legacy build outside Steam's update reach (docs/steam-and-updates.md).
-Verified here: UI builds and UI tests pass (Linux container). Rust additions are NOT verified until CI runs `cargo test --workspace` on Windows.
-Not verified: Discord against a live Discord client; any of this against a real Steam install; Helldivers 2 7.1.1 behaviour (still Not investigated).
-Wallpaper licences: no reverse-image-search tool is available to the authoring session, so none could be confirmed public domain.
+## Branch and safety net
+- `main` was never modified by the integration work until the owner asked for the merge. The legacy state is `9ece116`,
+  tagged locally as `legacy-pre-step-1.5`. See `docs/decisions/0002-step-1-5-consolidation.md` for the tag-push note.
 
 ## Next action
-1. Launch the desktop app on Windows (`npx tauri dev`) and report what you see.
-2. Then build the Helldivers 2 Build Manager slice: import an install, hash it, isolated copy, verify, launch tracking.
+1. On Windows: `git fetch`, `git checkout main`, `npm install`, `cargo test --workspace`, `npm run dev`; report what you see.
+2. Then the Game Library slice: a `scan_games` Tauri command feeding real scan results and the tick-and-compatibility matrix into
+   the Game Library page (replacing the mock data), then the per-game hub.
+3. Helldivers 2 Build Manager stays a separate adapter track.

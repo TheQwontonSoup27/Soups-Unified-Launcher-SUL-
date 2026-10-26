@@ -1,14 +1,24 @@
 [package]
-name = "sul-app"
-version = "0.1.0"
-edition = "2021"
-publish = false
+name = "sul-tauri"
+description = "Tauri container for Soups Unified Launcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[lib]
+name = "sul_lib"
+
+[features]
+# `npm run dev -- --features steam` (see README before enabling).
+steam = ["sul-core/steam"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = "2"
 
 [dependencies]
-tauri = { version = "2", features = [] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sul-core = { path = "../crates/sul-core" }
+tauri = "2"
+serde.workspace = true
+tracing-subscriber.workspace = true
+sul-core.workspace = true

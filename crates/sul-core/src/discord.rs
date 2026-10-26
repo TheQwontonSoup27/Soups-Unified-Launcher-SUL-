@@ -5,11 +5,19 @@
 //! Privacy rules (PROJECT_SPEC.md, Social module): presence is OFF by default; when the global
 //! toggle is off nothing is published and any existing activity is cleared; games whose capability
 //! status is Unsupported / Not investigated never publish.
+//!
+//! Images: an activity can carry a large image and a small "corner" image, each referenced by an
+//! asset key uploaded for the application in the Discord developer portal. As far as is known the
+//! activity payload has no field that controls how large Discord draws the small image (it is
+//! fixed by Discord), so a "scale the corner logo to N%" setting cannot be implemented here.
+//! Choosing *which* image is used is all that can be offered.
+
+use std::path::PathBuf;
+
+use serde_json::{Map, Value, json};
 
 use crate::capability::Status;
 use crate::{Error, Result};
-use serde_json::{json, Map, Value};
-use std::path::PathBuf;
 
 pub const RPC_VERSION: u32 = 1;
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -50,7 +58,10 @@ impl Opcode {
 /// Wire format: u32 LE opcode, u32 LE payload length, JSON payload.
 pub fn encode_frame(op: Opcode, payload: &[u8]) -> Result<Vec<u8>> {
     if payload.len() + HEADER > MAX_FRAME {
-        return Err(Error::Invalid(format!("Discord frame too large: {} bytes", payload.len())));
+        return Err(Error::Invalid(format!(
+            "Discord frame too large: {} bytes",
+            payload.len()
+        )));
     }
     let mut out = Vec::with_capacity(HEADER + payload.len());
     out.extend_from_slice(&op.to_u32().to_le_bytes());
@@ -66,9 +77,12 @@ pub fn decode_frame(buf: &[u8]) -> Result<Option<(Opcode, Vec<u8>, usize)>> {
     }
     let raw_op = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
     let len = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
-    let op = Opcode::from_u32(raw_op).ok_or_else(|| Error::Invalid(format!("unknown Discord opcode {raw_op}")))?;
+    let op = Opcode::from_u32(raw_op)
+        .ok_or_else(|| Error::Invalid(format!("unknown Discord opcode {raw_op}")))?;
     if len + HEADER > MAX_FRAME {
-        return Err(Error::Invalid(format!("Discord frame too large: {len} bytes")));
+        return Err(Error::Invalid(format!(
+            "Discord frame too large: {len} bytes"
+        )));
     }
     if buf.len() < HEADER + len {
         return Ok(None);
@@ -83,7 +97,22 @@ pub struct Presence {
     /// Asset key uploaded in the Discord developer portal for this application.
     pub large_image: String,
     pub large_text: String,
+    /// Asset key for the small corner image (for example the Team27 logo). Empty means none.
+    pub small_image: String,
+    pub small_text: String,
     pub start_unix: Option<u64>,
+}
+
+/// Longest asset key Discord accepts.
+const MAX_ASSET_KEY: usize = 256;
+
+/// An asset key is trimmed and must be non-empty, printable and not absurdly long.
+pub fn sanitize_asset_key(s: &str) -> Option<String> {
+    let key = s.trim();
+    if key.is_empty() || key.chars().count() > MAX_ASSET_KEY || key.chars().any(char::is_control) {
+        return None;
+    }
+    Some(key.to_owned())
 }
 
 /// Discord needs 2..=128 characters. Control characters are stripped. Returns None if unusable.
@@ -107,13 +136,20 @@ pub fn activity_json(p: &Presence) -> Value {
     if let Some(t) = p.start_unix {
         a.insert("timestamps".into(), json!({ "start": t }));
     }
-    let image = p.large_image.trim();
-    if !image.is_empty() {
-        let mut assets = Map::new();
-        assets.insert("large_image".into(), json!(image));
-        if let Some(t) = sanitize_text(&p.large_text) {
-            assets.insert("large_text".into(), json!(t));
+    // Hover text only makes sense next to its image, so each pair is all-or-nothing.
+    let mut assets = Map::new();
+    for (image_field, text_field, image, text) in [
+        ("large_image", "large_text", &p.large_image, &p.large_text),
+        ("small_image", "small_text", &p.small_image, &p.small_text),
+    ] {
+        if let Some(key) = sanitize_asset_key(image) {
+            assets.insert(image_field.into(), json!(key));
+            if let Some(t) = sanitize_text(text) {
+                assets.insert(text_field.into(), json!(t));
+            }
         }
+    }
+    if !assets.is_empty() {
         a.insert("assets".into(), Value::Object(assets));
     }
     Value::Object(a)
@@ -156,7 +192,13 @@ fn is_error_event(v: &Value) -> bool {
 impl<T: Transport> RichPresence<T> {
     /// Starts disabled (opt-in) and disconnected.
     pub fn new(client_id: &str, transport: T) -> Self {
-        Self { client_id: client_id.to_string(), transport, enabled: false, connected: false, nonce: 0 }
+        Self {
+            client_id: client_id.to_string(),
+            transport,
+            enabled: false,
+            connected: false,
+            nonce: 0,
+        }
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -167,15 +209,25 @@ impl<T: Transport> RichPresence<T> {
     }
 
     pub fn connect(&mut self) -> Result<()> {
-        self.transport.write_frame(Opcode::Handshake, &json!({ "v": RPC_VERSION, "client_id": self.client_id }))?;
+        self.transport.write_frame(
+            Opcode::Handshake,
+            &json!({ "v": RPC_VERSION, "client_id": self.client_id }),
+        )?;
         for _ in 0..MAX_READS {
             let (op, v) = self.transport.read_frame()?;
             match op {
                 Opcode::Ping => self.transport.write_frame(Opcode::Pong, &v)?,
-                Opcode::Close => return Err(Error::Invalid(format!("Discord closed the connection: {v}"))),
+                Opcode::Close => {
+                    return Err(Error::Invalid(format!(
+                        "Discord closed the connection: {v}"
+                    )));
+                }
                 Opcode::Frame => {
                     if is_error_event(&v) {
-                        return Err(Error::Invalid(format!("Discord rejected the handshake: {}", v["data"])));
+                        return Err(Error::Invalid(format!(
+                            "Discord rejected the handshake: {}",
+                            v["data"]
+                        )));
                     }
                     if v.get("evt").and_then(Value::as_str) == Some("READY") {
                         self.connected = true;
@@ -185,7 +237,9 @@ impl<T: Transport> RichPresence<T> {
                 _ => {}
             }
         }
-        Err(Error::Invalid("Discord did not answer the handshake with READY".into()))
+        Err(Error::Invalid(
+            "Discord did not answer the handshake with READY".into(),
+        ))
     }
 
     fn send_activity(&mut self, activity: Option<&Presence>) -> Result<()> {
@@ -201,18 +255,25 @@ impl<T: Transport> RichPresence<T> {
                 Opcode::Ping => self.transport.write_frame(Opcode::Pong, &v)?,
                 Opcode::Close => {
                     self.connected = false;
-                    return Err(Error::Invalid(format!("Discord closed the connection: {v}")));
+                    return Err(Error::Invalid(format!(
+                        "Discord closed the connection: {v}"
+                    )));
                 }
                 Opcode::Frame => {
                     if is_error_event(&v) {
-                        return Err(Error::Invalid(format!("Discord rejected the activity: {}", v["data"])));
+                        return Err(Error::Invalid(format!(
+                            "Discord rejected the activity: {}",
+                            v["data"]
+                        )));
                     }
                     return Ok(());
                 }
                 _ => {}
             }
         }
-        Err(Error::Invalid("Discord did not acknowledge the activity".into()))
+        Err(Error::Invalid(
+            "Discord did not acknowledge the activity".into(),
+        ))
     }
 
     /// The global on/off switch. Turning it off clears any activity Discord is showing.
@@ -231,7 +292,7 @@ impl<T: Transport> RichPresence<T> {
         if !self.enabled {
             return Ok(PublishOutcome::DisabledByUser);
         }
-        if !matches!(status, Status::SupportedTested | Status::Partial | Status::Experimental) {
+        if !status.is_available() {
             return Ok(PublishOutcome::UnsupportedGame);
         }
         self.send_activity(Some(p))?;
@@ -251,12 +312,19 @@ pub struct IpcTransport {
 }
 
 fn io_err(e: std::io::Error) -> Error {
-    Error::Io { path: PathBuf::from("discord-ipc"), source: e }
+    Error::Io {
+        path: PathBuf::from("discord-ipc"),
+        source: e,
+    }
 }
 
 #[cfg(windows)]
 fn open_pipe(n: u32) -> Option<Io> {
-    std::fs::OpenOptions::new().read(true).write(true).open(format!(r"\\.\pipe\discord-ipc-{n}")).ok()
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(format!(r"\\.\pipe\discord-ipc-{n}"))
+        .ok()
 }
 
 #[cfg(unix)]
@@ -277,7 +345,9 @@ impl IpcTransport {
                 return Ok(Self { io });
             }
         }
-        Err(Error::Invalid("Discord does not appear to be running (no IPC pipe found)".into()))
+        Err(Error::Invalid(
+            "Discord does not appear to be running (no IPC pipe found)".into(),
+        ))
     }
 }
 
@@ -296,7 +366,9 @@ impl Transport for IpcTransport {
         self.io.read_exact(&mut head).map_err(io_err)?;
         let len = u32::from_le_bytes([head[4], head[5], head[6], head[7]]) as usize;
         if len + HEADER > MAX_FRAME {
-            return Err(Error::Invalid(format!("Discord frame too large: {len} bytes")));
+            return Err(Error::Invalid(format!(
+                "Discord frame too large: {len} bytes"
+            )));
         }
         let mut buf = head.to_vec();
         buf.resize(HEADER + len, 0);

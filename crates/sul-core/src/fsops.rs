@@ -1,9 +1,13 @@
 //! Safe file operations: atomic writes, protected roots, and isolated tree copies.
 //! The original installation is registered as protected; nothing here writes into it.
 
-use crate::{error::io, journal::Journal, Error, Result};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+use crate::error::io;
+use crate::journal::Journal;
+use crate::safepath::resolve_lenient;
+use crate::{Error, Result};
 
 /// Locations that must never be written to or deleted from (e.g. the Steam install).
 #[derive(Debug, Default, Clone)]
@@ -15,27 +19,20 @@ impl ProtectedRoots {
     pub fn new() -> Self {
         Self::default()
     }
+
     pub fn add(&mut self, p: &Path) -> Result<()> {
         self.roots.push(p.canonicalize().map_err(io(p))?);
         Ok(())
     }
-    /// Err(Protected) if `target` (existing or not) lies inside any protected root.
+
+    /// `Err(Protected)` if `target` (existing or not) lies inside any protected root.
+    ///
+    /// The target is resolved with [`resolve_lenient`], so symlinks and `..` segments, including
+    /// ones that follow folders that do not exist yet, cannot be used to reach a protected root.
     pub fn check_writable(&self, target: &Path) -> Result<()> {
-        let mut probe = target;
-        let canon = loop {
-            if probe.exists() {
-                let c = probe.canonicalize().map_err(io(probe))?;
-                break c.join(target.strip_prefix(probe).unwrap_or(Path::new("")));
-            }
-            match probe.parent() {
-                Some(p) if !p.as_os_str().is_empty() => probe = p,
-                _ => break target.to_path_buf(),
-            }
-        };
-        for r in &self.roots {
-            if canon.starts_with(r) {
-                return Err(Error::Protected(target.to_path_buf()));
-            }
+        let resolved = resolve_lenient(target);
+        if self.roots.iter().any(|root| resolved.starts_with(root)) {
+            return Err(Error::Protected(target.to_path_buf()));
         }
         Ok(())
     }
@@ -44,9 +41,17 @@ impl ProtectedRoots {
 /// Write via a temp file in the same directory, fsync, then rename over the target.
 pub fn atomic_write(protected: &ProtectedRoots, target: &Path, data: &[u8]) -> Result<()> {
     protected.check_writable(target)?;
-    let dir = target.parent().ok_or_else(|| Error::Invalid("target has no parent".into()))?;
+    let dir = target
+        .parent()
+        .ok_or_else(|| Error::Invalid("target has no parent".into()))?;
     std::fs::create_dir_all(dir).map_err(io(dir))?;
-    let tmp = dir.join(format!(".{}.tmp", target.file_name().and_then(|n| n.to_str()).unwrap_or("file")));
+    let tmp = dir.join(format!(
+        ".{}.tmp",
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("file")
+    ));
     {
         let mut f = std::fs::File::create(&tmp).map_err(io(&tmp))?;
         f.write_all(data).map_err(io(&tmp))?;
@@ -64,7 +69,10 @@ fn copy_recursive(src: &Path, dst: &Path) -> Result<()> {
         let to = dst.join(entry.file_name());
         let ft = entry.file_type().map_err(io(&from))?;
         if ft.is_symlink() {
-            return Err(Error::UnsafePath(format!("refusing to copy symlink: {}", from.display())));
+            return Err(Error::UnsafePath(format!(
+                "refusing to copy symlink: {}",
+                from.display()
+            )));
         }
         if ft.is_dir() {
             copy_recursive(&from, &to)?;
@@ -76,32 +84,89 @@ fn copy_recursive(src: &Path, dst: &Path) -> Result<()> {
 }
 
 /// Copy `src` to a brand-new `dst` as an isolated build. `src` is only ever read.
+///
 /// Copies into `<dst>.partial` first, then renames, journaling begin/commit so an interrupted
 /// copy is detectable. Refuses overlapping paths and existing destinations.
-pub fn isolated_copy(protected: &ProtectedRoots, journal: &Journal, op_id: &str, src: &Path, dst: &Path) -> Result<()> {
+pub fn isolated_copy(
+    protected: &ProtectedRoots,
+    journal: &Journal,
+    op_id: &str,
+    src: &Path,
+    dst: &Path,
+) -> Result<()> {
     protected.check_writable(dst)?;
     if dst.exists() {
         return Err(Error::DestinationExists(dst.to_path_buf()));
     }
     let src_c = src.canonicalize().map_err(io(src))?;
-    let parent = dst.parent().ok_or_else(|| Error::Invalid("dst has no parent".into()))?;
+    let parent = dst
+        .parent()
+        .ok_or_else(|| Error::Invalid("dst has no parent".into()))?;
     std::fs::create_dir_all(parent).map_err(io(parent))?;
-    let dst_c = parent.canonicalize().map_err(io(parent))?
-        .join(dst.file_name().ok_or_else(|| Error::Invalid("dst has no name".into()))?);
+    let dst_c = parent.canonicalize().map_err(io(parent))?.join(
+        dst.file_name()
+            .ok_or_else(|| Error::Invalid("dst has no name".into()))?,
+    );
     if dst_c.starts_with(&src_c) || src_c.starts_with(&dst_c) {
         return Err(Error::Invalid("source and destination overlap".into()));
     }
     let partial = PathBuf::from(format!("{}.partial", dst.display()));
     if partial.exists() {
-        return Err(Error::DestinationExists(partial)); // leftover from an interrupted run: needs explicit recovery
+        // Leftover from an interrupted run: needs explicit recovery, never silent reuse.
+        return Err(Error::DestinationExists(partial));
     }
-    journal.begin(op_id, "isolated_copy", &format!("{} -> {}", src.display(), dst.display()))?;
-    let result = copy_recursive(&src_c, &partial).and_then(|_| std::fs::rename(&partial, dst).map_err(io(dst)));
+    journal.begin(
+        op_id,
+        "isolated_copy",
+        &format!("{} -> {}", src.display(), dst.display()),
+    )?;
+    let result = copy_recursive(&src_c, &partial)
+        .and_then(|_| std::fs::rename(&partial, dst).map_err(io(dst)));
     match result {
         Ok(()) => journal.commit(op_id),
         Err(e) => {
             let _ = journal.abort(op_id, &e.to_string());
             Err(e)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parent_dirs_after_missing_folders_cannot_reach_a_protected_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        let original = base.join("original_install");
+        std::fs::create_dir_all(&original).unwrap();
+        std::fs::create_dir_all(base.join("elsewhere")).unwrap();
+
+        let mut protected = ProtectedRoots::new();
+        protected.add(&original).unwrap();
+
+        // elsewhere/missing/../../original_install/x  ==  original_install/x
+        let sneaky = base
+            .join("elsewhere")
+            .join("missing")
+            .join("..")
+            .join("..")
+            .join("original_install")
+            .join("x");
+        assert!(matches!(
+            protected.check_writable(&sneaky),
+            Err(Error::Protected(_))
+        ));
+        assert!(matches!(
+            atomic_write(&protected, &sneaky, b"nope"),
+            Err(Error::Protected(_))
+        ));
+        assert!(!original.join("x").exists());
+
+        // A normal sibling location is fine.
+        protected
+            .check_writable(&base.join("elsewhere").join("ok.txt"))
+            .unwrap();
     }
 }

@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
-import { Dialog, PageHeader } from "../components";
+import { Dialog } from "../components/Dialog";
 import { ACCEPTED } from "../background";
 import { useSettings } from "../settings";
 import { THEMES, TOKEN_KEYS, TOKEN_LABELS, checkPairs } from "../theme";
 
-export function AppearancePage() {
+/** Themes, colours and background. Shown as a pane inside Settings. */
+export function AppearancePanel() {
   const s = useSettings();
   const [msg, setMsg] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -14,8 +15,6 @@ export function AppearancePage() {
 
   return (
     <>
-      <PageHeader title="Appearance" subtitle="Themes, colours and background." />
-
       <section className="card">
         <h3>Theme</h3>
         <div className="theme-grid" role="radiogroup" aria-label="Theme">

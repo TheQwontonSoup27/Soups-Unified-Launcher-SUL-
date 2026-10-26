@@ -1,7 +1,7 @@
 //! Build manifests: inventory + SHA-256 of a build directory, and read-only verification.
 //! Scanning and verifying never modify the directory.
 
-use crate::{error::io, safepath, Error, Result};
+use crate::{Error, Result, error::io, safepath};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -92,14 +92,21 @@ fn walk(root: &Path) -> Result<BTreeMap<String, std::path::PathBuf>> {
             let p = entry.path();
             let ft = entry.file_type().map_err(io(&p))?;
             if ft.is_symlink() {
-                return Err(Error::UnsafePath(format!("symlink in managed build: {}", p.display())));
+                return Err(Error::UnsafePath(format!(
+                    "symlink in managed build: {}",
+                    p.display()
+                )));
             }
             if ft.is_dir() {
                 stack.push(p);
             } else if ft.is_file() {
-                let rel = p.strip_prefix(root).unwrap().components()
+                let rel = p
+                    .strip_prefix(root)
+                    .unwrap()
+                    .components()
                     .map(|c| c.as_os_str().to_string_lossy().into_owned())
-                    .collect::<Vec<_>>().join("/");
+                    .collect::<Vec<_>>()
+                    .join("/");
                 out.insert(rel, p);
             }
         }
@@ -108,13 +115,27 @@ fn walk(root: &Path) -> Result<BTreeMap<String, std::path::PathBuf>> {
 }
 
 impl BuildManifest {
-    pub fn scan(root: &Path, game_id: &str, display_name: &str, variant: Variant, base_version: &str, source: &str) -> Result<Self> {
+    pub fn scan(
+        root: &Path,
+        game_id: &str,
+        display_name: &str,
+        variant: Variant,
+        base_version: &str,
+        source: &str,
+    ) -> Result<Self> {
         let mut files = Vec::new();
         for (rel, p) in walk(root)? {
             let (sha256, size) = hash_file(&p)?;
-            files.push(FileEntry { path: rel, sha256, size });
+            files.push(FileEntry {
+                path: rel,
+                sha256,
+                size,
+            });
         }
-        let created_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let created_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         Ok(Self {
             schema_version: SCHEMA_VERSION,
             game_id: game_id.into(),
@@ -145,7 +166,8 @@ impl BuildManifest {
                 }
             }
         }
-        let known: std::collections::HashSet<&str> = self.files.iter().map(|f| f.path.as_str()).collect();
+        let known: std::collections::HashSet<&str> =
+            self.files.iter().map(|f| f.path.as_str()).collect();
         for k in on_disk.keys() {
             if !known.contains(k.as_str()) {
                 report.extra.push(k.clone());
@@ -161,7 +183,10 @@ impl BuildManifest {
     pub fn from_json(s: &str) -> Result<Self> {
         let m: Self = serde_json::from_str(s)?;
         if m.schema_version > SCHEMA_VERSION {
-            return Err(Error::Invalid(format!("manifest schema {} is newer than supported {}", m.schema_version, SCHEMA_VERSION)));
+            return Err(Error::Invalid(format!(
+                "manifest schema {} is newer than supported {}",
+                m.schema_version, SCHEMA_VERSION
+            )));
         }
         Ok(m)
     }

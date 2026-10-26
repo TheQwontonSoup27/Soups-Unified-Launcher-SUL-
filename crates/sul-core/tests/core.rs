@@ -1,13 +1,13 @@
 use serde_json::json;
 use std::fs;
 use std::path::Path;
+use sul_core::Error;
 use sul_core::capability::{CapabilityEntry, Status};
-use sul_core::fsops::{atomic_write, isolated_copy, ProtectedRoots};
+use sul_core::fsops::{ProtectedRoots, atomic_write, isolated_copy};
 use sul_core::journal::Journal;
-use sul_core::logging::{redact, Logger};
+use sul_core::logging::{Logger, redact};
 use sul_core::manifest::{BuildManifest, Variant};
 use sul_core::safepath::{join_within, validate_relative};
-use sul_core::Error;
 
 fn write(p: &Path, s: &str) {
     fs::create_dir_all(p.parent().unwrap()).unwrap();
@@ -23,16 +23,34 @@ fn sample_tree(root: &Path) {
 // ---- safepath ----
 #[test]
 fn rejects_unsafe_relative_paths() {
-    for bad in ["../x", "a/../../x", "/etc/passwd", "C:\\Windows", "C:/x", "", "a\0b", ".."] {
+    for bad in [
+        "../x",
+        "a/../../x",
+        "/etc/passwd",
+        "C:\\Windows",
+        "C:/x",
+        "",
+        "a\0b",
+        "..",
+    ] {
         assert!(validate_relative(bad).is_err(), "should reject {bad:?}");
     }
 }
 
 #[test]
 fn accepts_normal_relative_paths() {
-    assert_eq!(validate_relative("a/b/c.txt").unwrap(), Path::new("a").join("b").join("c.txt"));
-    assert_eq!(validate_relative("a\\b.txt").unwrap(), Path::new("a").join("b.txt"));
-    assert_eq!(validate_relative("./a//b").unwrap(), Path::new("a").join("b"));
+    assert_eq!(
+        validate_relative("a/b/c.txt").unwrap(),
+        Path::new("a").join("b").join("c.txt")
+    );
+    assert_eq!(
+        validate_relative("a\\b.txt").unwrap(),
+        Path::new("a").join("b.txt")
+    );
+    assert_eq!(
+        validate_relative("./a//b").unwrap(),
+        Path::new("a").join("b")
+    );
 }
 
 #[test]
@@ -71,7 +89,15 @@ fn supported_tested_requires_evidence() {
 fn manifest_verify_detects_changes() {
     let d = tempfile::tempdir().unwrap();
     sample_tree(d.path());
-    let m = BuildManifest::scan(d.path(), "terraria", "Terraria", Variant::Original, "1.4.4", "test").unwrap();
+    let m = BuildManifest::scan(
+        d.path(),
+        "terraria",
+        "Terraria",
+        Variant::Original,
+        "1.4.4",
+        "test",
+    )
+    .unwrap();
     assert_eq!(m.files.len(), 3);
     assert!(m.verify(d.path()).unwrap().is_clean());
 
@@ -88,7 +114,8 @@ fn manifest_verify_detects_changes() {
 fn manifest_json_roundtrip_and_future_schema_rejected() {
     let d = tempfile::tempdir().unwrap();
     sample_tree(d.path());
-    let m = BuildManifest::scan(d.path(), "g", "G", Variant::Custom("mine".into()), "1", "s").unwrap();
+    let m =
+        BuildManifest::scan(d.path(), "g", "G", Variant::Custom("mine".into()), "1", "s").unwrap();
     let back = BuildManifest::from_json(&m.to_json().unwrap()).unwrap();
     assert_eq!(m, back);
     let mut v: serde_json::Value = serde_json::from_str(&m.to_json().unwrap()).unwrap();
@@ -119,8 +146,14 @@ fn isolated_copy_never_touches_source_and_verifies_clean() {
     let dst = base.path().join("builds/legacy");
     isolated_copy(&prot, &journal, "op1", &src, &dst).unwrap();
 
-    assert!(before.verify(&src).unwrap().is_clean(), "source must be unchanged");
-    assert!(before.verify(&dst).unwrap().is_clean(), "copy must match source");
+    assert!(
+        before.verify(&src).unwrap().is_clean(),
+        "source must be unchanged"
+    );
+    assert!(
+        before.verify(&dst).unwrap().is_clean(),
+        "copy must match source"
+    );
     assert!(journal.pending().unwrap().is_empty());
     assert!(!base.path().join("builds/legacy.partial").exists());
 }
@@ -191,7 +224,12 @@ fn logger_redacts_secrets_on_disk() {
     let d = tempfile::tempdir().unwrap();
     let path = d.path().join("logs/sul.jsonl");
     let log = Logger::open(&path).unwrap();
-    log.log("info", "login", json!({"user": "soup", "access_token": "SUPERSECRET", "nested": {"Password": "hunter2"}})).unwrap();
+    log.log(
+        "info",
+        "login",
+        json!({"user": "soup", "access_token": "SUPERSECRET", "nested": {"Password": "hunter2"}}),
+    )
+    .unwrap();
     let text = fs::read_to_string(&path).unwrap();
     assert!(!text.contains("SUPERSECRET") && !text.contains("hunter2"));
     assert!(text.contains("[REDACTED]") && text.contains("soup"));

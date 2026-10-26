@@ -2,7 +2,10 @@
 
 Staged priorities, not promises. Update status only with evidence.
 
-1. **Foundation** — IN PROGRESS: shell, theme tokens, core crates written; awaiting first Rust compile/test run and Tauri build.
+1. **Foundation** — DONE in code, Windows verification pending: monorepo, shell, theme, registry scanner, compatibility matrix,
+   library index, storage isolator, updater, portability, templates, safety core, Discord presence (Step 1 and Step 1.5).
+   Not yet run on Windows as one build; see `PROJECT_STATUS.md`.
+   **Next slice:** Game Library showing real scan results and the tick-and-compatibility matrix, then the per-game hub.
 2. Build management: import/verify, original/optimized/experimental slots, rollback; HD2 7.1.1 isolation research (separate adapter track).
 3. Mod management: profiles, ownership-aware deploy/purge, dry-run, conflicts, backup/recovery.
 4. Mod Builder: one real adapter path, then audio, Bink/RAD Video, patch workflow, Blender.
@@ -14,3 +17,6 @@ Staged priorities, not promises. Update status only with evidence.
 10. News and update monitoring.
 11. Emulator adapters and tested features.
 12. Deferred: save transfer, broader publishing APIs, DMs, integrity adapters, Steamworks replacement, relays, emulator-engine development.
+
+Open items from the Step 1 spec that conflict with `CLAUDE.md` and need an owner decision before work starts: persistent Steam
+credentials, and Direct3D/Vulkan overlay hooks (anti-cheat risk).

@@ -1,46 +1,55 @@
 name: CI
 on: [push, pull_request]
+
+# Windows only for now (owner decision 2026-10-22). Scripts are the same ones documented in
+# docs/SETUP-WINDOWS.md, so a green run here means those steps work on a clean machine.
 jobs:
   core:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --workspace
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p sul-core --all-targets -- -D warnings
+      - run: cargo test -p sul-core
+
   ui:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: npm install
-        working-directory: ui
-      - run: npm run typecheck
-        working-directory: ui
-      - run: npm test
-        working-directory: ui
-      - run: npm run build
-        working-directory: ui
+      - run: npm ci
+      - run: npm run ui:typecheck
+      - run: npm test --workspace ui
+      - run: npm run ui:build
+
   tauri-shell:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: npm install
-        working-directory: ui
-      - run: npm run build
-        working-directory: ui
-      - name: cargo check (errors surfaced as annotations)
-        working-directory: src-tauri
+      - run: npm ci
+      # The Tauri build script needs the built UI (`frontendDist`).
+      - run: npm run ui:build
+      - name: clippy and tests for the desktop wrapper (errors surfaced as annotations)
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          cargo check --message-format=short 2>&1 | Tee-Object -FilePath check.log
+          cargo clippy -p sul-tauri --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath check.log
           $code = $LASTEXITCODE
+          if ($code -eq 0) {
+            cargo test -p sul-tauri 2>&1 | Tee-Object -FilePath test.log -Append
+            $code = $LASTEXITCODE
+          }
           if ($code -ne 0) {
-            $lines = Get-Content check.log | Where-Object { $_ -match 'error|failed|not found|could not' } | Select-Object -First 12
+            $lines = Get-Content check.log, test.log -ErrorAction SilentlyContinue | Where-Object { $_ -match 'error|failed|not found|could not' } | Select-Object -First 12
             foreach ($l in $lines) { Write-Host "::error::$($l -replace '[\r\n%]',' ')" }
             exit $code
           }

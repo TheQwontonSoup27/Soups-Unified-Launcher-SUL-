@@ -16,6 +16,21 @@ export const STATUS_HELP: Record<Status, string> = {
   not_investigated: "No adequate feasibility assessment yet.",
 };
 
+/** Strongest first: the order a legend lists the labels in (mirrors `Status::ALL` in sul-core). */
+export const STATUS_ORDER: Status[] = ["supported_tested", "partial", "experimental", "unsupported", "not_investigated"];
+
+const STRENGTH: Record<Status, number> = { unsupported: 0, not_investigated: 1, experimental: 2, partial: 3, supported_tested: 4 };
+
+/**
+ * The headline rule: a set of capabilities is only as good as its weakest member, so a summary
+ * can never overclaim. An empty set is "not investigated". Mirrors `Status::weakest` in sul-core.
+ */
+export function weakestStatus(statuses: Iterable<Status>): Status {
+  let weakest: Status | null = null;
+  for (const s of statuses) if (weakest === null || STRENGTH[s] < STRENGTH[weakest]) weakest = s;
+  return weakest ?? "not_investigated";
+}
+
 /** Mirrors sul-core's rule: "Supported and tested" needs a test date and evidence. */
 export function validateCapability(c: CapabilityEntry): string | null {
   if (c.status === "supported_tested" && (!c.testDate?.trim() || !c.evidence?.trim())) {

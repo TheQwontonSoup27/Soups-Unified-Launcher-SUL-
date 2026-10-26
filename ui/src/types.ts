@@ -20,4 +20,6 @@ export interface ModuleDef {
   /** Status of the module as a whole. Must be truthful: nothing is tested yet. */
   status: Status;
   specRef: string;
+  /** Where the module lives in the shell: the Game Library page, its own sidebar entry, or a Settings pane. */
+  home: "library" | "sidebar" | "settings";
 }

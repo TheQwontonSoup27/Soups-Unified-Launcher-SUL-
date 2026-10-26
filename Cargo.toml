@@ -1,11 +1,26 @@
 [workspace]
-resolver = "2"
-members = ["crates/sul-core"]
-# src-tauri is intentionally NOT a workspace member: it needs OS webview libs
-# so core tests stay independent of the desktop wrapper. Build it from src-tauri/.
-exclude = ["src-tauri"]
+resolver = "3"
+members = ["crates/sul-core", "src-tauri"]
 
 [workspace.package]
-edition = "2021"
 version = "0.1.0"
-# license: undecided (spec section 7) — placeholder until the owner chooses
+edition = "2024"
+rust-version = "1.85"
+publish = false
+repository = "https://github.com/TheQwontonSoup27/Soups-Unified-Launcher-SUL-"
+# license: undecided (PROJECT_SPEC.md section 7). Left unset on purpose until the owner chooses.
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+sha2 = "0.10"
+hex = "0.4"
+sul-core = { path = "crates/sul-core" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
