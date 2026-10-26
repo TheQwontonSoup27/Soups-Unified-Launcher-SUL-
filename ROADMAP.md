@@ -2,9 +2,9 @@
 
 Staged priorities, not promises. Update status only with evidence.
 
-1. **Foundation** — DONE in code, Windows verification pending: monorepo, shell, theme, registry scanner, compatibility matrix,
-   library index, storage isolator, updater, portability, templates, safety core, Discord presence (Step 1 and Step 1.5).
-   Not yet run on Windows as one build; see `PROJECT_STATUS.md`.
+1. **Foundation** — DONE in code, built and tested in Windows CI; not yet launched on a real machine: monorepo, shell, theme,
+   registry scanner, compatibility matrix, library index, storage isolator, updater, portability, templates, safety core, Discord
+   presence (Step 1 and Step 1.5). Four redundant legacy files await deletion; see `PROJECT_STATUS.md`.
    **Next slice:** Game Library showing real scan results and the tick-and-compatibility matrix, then the per-game hub.
 2. Build management: import/verify, original/optimized/experimental slots, rollback; HD2 7.1.1 isolation research (separate adapter track).
 3. Mod management: profiles, ownership-aware deploy/purge, dry-run, conflicts, backup/recovery.

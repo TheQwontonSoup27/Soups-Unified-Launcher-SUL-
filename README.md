@@ -24,4 +24,4 @@ npm run dev
 ## Status
 Every capability carries one of: Supported and tested, Partially supported, Experimental, Unsupported, Not investigated.
 Nothing is marked "Supported and tested" without a test date and evidence; see `docs/capability-matrix/README.md`.
-The merged build has not yet been run on Windows. Licence: not yet chosen.
+CI builds and tests the merged code on Windows; the desktop app itself has not been launched from it yet. Licence: not yet chosen.

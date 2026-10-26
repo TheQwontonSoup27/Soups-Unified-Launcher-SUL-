@@ -29,13 +29,20 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
   5 in `tests/steam.rs`, 1 in `sul-tauri`).
 - `npm run ui:typecheck` → clean. `npm run ui:test` → 33 passed, 0 failed. `npm run ui:build` → built (44 modules).
 
+## Verified in GitHub Actions (run 40276520399, commit 04c968f, windows-latest)
+- `core`: `cargo fmt --all --check`, `cargo clippy -p sul-core --all-targets -- -D warnings`, `cargo test -p sul-core` all passed.
+  This is the first build of the merged code on Windows, including the Windows-only `WindowsRegistry` and `FixedDrives`.
+- `ui`: `npm ci`, `npm run ui:typecheck`, `npm test --workspace ui`, `npm run ui:build` all passed.
+- `tauri-shell`: `npm run ui:build`, `cargo clippy -p sul-tauri --all-targets -- -D warnings`, `cargo test -p sul-tauri` passed.
+- Per-test counts for this run were not read (job and step results only).
+
 ## Verified earlier by the owner (before the merge, on the Step 1 archive, Windows)
 - Registry scanner archive: 78 tests passed and 38 games were mapped. That run predates this merge and used the scanner on its own.
   Whether all 38 are correct, or whether games were missed, was not checked against a list.
 
 ## NOT verified
-- The merged branch has not been compiled or tested on Windows yet. The Windows-only adapters (`WindowsRegistry`, `FixedDrives`)
-  are compiled only there; this session's Linux container cannot build them. GitHub Actions on `windows-latest` is the first check.
+- The merged build has not been run by the owner on Windows (only CI built and tested it). The scanner's real-machine result for the
+  merged code is unconfirmed.
 - The desktop app has not been launched from this branch (`npm run dev`). The borderless title-bar buttons and the move from
   `withGlobalTauri` to `@tauri-apps/api` have never run inside a real Tauri window.
 - Discord against a live Discord client; any of this against a real game install beyond the owner's scan; no game adapter exists.
@@ -46,8 +53,16 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
   logs, no anti-cheat bypass); not started, to be settled when those steps come up.
 
 ## Branch and safety net
-- `main` was never modified by the integration work until the owner asked for the merge. The legacy state is `9ece116`,
-  tagged locally as `legacy-pre-step-1.5`. See `docs/decisions/0002-step-1-5-consolidation.md` for the tag-push note.
+- `step-1.5` was merged into `main` by fast-forward (9ece116 → 04c968f) at the owner's request; both branches are on GitHub.
+  The legacy state is commit `9ece116`, tagged locally as `legacy-pre-step-1.5`. Pushing that tag was refused (HTTP 403) from the
+  authoring session, so it is not on GitHub; see `docs/decisions/0002-step-1-5-consolidation.md`.
+
+## Wipeout (pending)
+Four legacy files are redundant and still tracked, because deleting them was blocked by the authoring session's permission system:
+`ui/build.mjs` (old esbuild script; esbuild is no longer a dependency), `ui/src/components.tsx` (replaced by `ui/src/components/`),
+`ui/src/overview.tsx` (replaced by `ui/src/views/GameLibrary.tsx` and `weakestStatus` in `ui/src/capabilities.ts`), and
+`ui/public/icon.svg` (unreferenced placeholder art). Redundancy check run: a copy of `ui/` without the first three typechecked,
+passed 33/33 UI tests and produced a bundle with the same content hashes as the full tree. `icon.svg` was checked by search only.
 
 ## Next action
 1. On Windows: `git fetch`, `git checkout main`, `npm install`, `cargo test --workspace`, `npm run dev`; report what you see.

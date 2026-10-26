@@ -20,6 +20,12 @@ portability, templates, Vite shell). Step 1.5 merged them on branch `step-1.5` i
 5. **Discord corner image.** An asset key for the small image is supported end to end (`Presence::small_image`, `discord_set_enabled`,
    Settings → Discord). A "scale to N%" slider is **not** offered: as far as is known the activity payload has no size field, Discord fixes it.
 
+## Outcome
+- 2026-10-26: `step-1.5` (04c968f) passed Windows CI (run 40276520399) and was fast-forwarded into `main` at the owner's request.
+  `main` therefore contains the pre-merge history, so 9ece116 stays reachable.
+- Four redundant legacy files remained tracked afterwards (see `PROJECT_STATUS.md`, "Wipeout"); deleting them was blocked by the
+  authoring session's permission system and is left to the owner's go-ahead.
+
 ## Choices made while merging (not in the owner's list; reversible)
 - **Bundler: Vite**, from the scaffold, replacing the earlier esbuild script (`ui/build.mjs`). Tests keep the earlier `tsx --test` runner.
 - **`src-tauri` is a workspace member** (scaffold layout), superseding the "excluded from the workspace" line of 0001. On Linux,
