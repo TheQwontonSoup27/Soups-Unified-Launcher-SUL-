@@ -60,6 +60,26 @@ impl Feature {
         Feature::Diagnostics,
     ];
 
+    /// The stable identifier used on the wire and in files (the same text serde writes).
+    pub fn id(self) -> &'static str {
+        match self {
+            Feature::SaveIsolation => "save_isolation",
+            Feature::ConfigOverride => "config_override",
+            Feature::SteamHeadless => "steam_headless",
+            Feature::ControllerRemap => "controller_remap",
+            Feature::Overlay => "overlay",
+            Feature::DiscordRpc => "discord_rpc",
+            Feature::Mods => "mods",
+            Feature::Diagnostics => "diagnostics",
+        }
+    }
+
+    /// Parse an identifier from [`Feature::id`]. Anything else is `None`: callers that take
+    /// the text from the UI must reject it rather than guess.
+    pub fn from_id(id: &str) -> Option<Feature> {
+        Feature::ALL.into_iter().find(|f| f.id() == id)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Feature::SaveIsolation => "Save isolation",
@@ -445,6 +465,26 @@ mod tests {
     }
 
     // ---- the five capability labels layered on the matrix ----
+
+    #[test]
+    fn feature_ids_match_what_serde_writes_and_round_trip() {
+        for feature in Feature::ALL {
+            let written = serde_json::to_value(feature).unwrap();
+            assert_eq!(written, feature.id(), "{feature:?}");
+            assert_eq!(Feature::from_id(feature.id()), Some(feature));
+        }
+        // Not a lookup by label, by case, or by a near miss.
+        for bad in [
+            "",
+            "Save isolation",
+            "SAVE_ISOLATION",
+            "save-isolation",
+            "mod",
+            " mods",
+        ] {
+            assert_eq!(Feature::from_id(bad), None, "{bad:?}");
+        }
+    }
 
     #[test]
     fn labels_are_derived_from_the_verdict() {

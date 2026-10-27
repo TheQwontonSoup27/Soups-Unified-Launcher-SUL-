@@ -2902,6 +2902,8 @@ dependencies = [
  "sul-core",
  "tauri",
  "tauri-build",
+ "tempfile",
+ "tracing",
  "tracing-subscriber",
 ]
 

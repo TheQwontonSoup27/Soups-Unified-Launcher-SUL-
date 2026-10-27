@@ -8,6 +8,7 @@
 //! | Registry scanner                       | [`registry`]    |
 //! | Per-game tick-and-compatibility matrix | [`matrix`]      |
 //! | Persisted library (scan + ticks)       | [`library`]     |
+//! | Library service for the UI (scan, matrix, tick) | [`service`] |
 //! | Storage isolator                       | [`storage`]     |
 //! | Baseline tracking & version self-updater | [`updater`]   |
 //! | Engine portability matrix              | [`portability`] |
@@ -41,6 +42,7 @@ pub mod matrix;
 pub mod portability;
 pub mod registry;
 pub mod safepath;
+pub mod service;
 pub mod steam;
 pub mod storage;
 pub mod templates;

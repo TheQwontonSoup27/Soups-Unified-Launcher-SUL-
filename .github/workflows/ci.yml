@@ -14,6 +14,9 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy -p sul-core --all-targets -- -D warnings
       - run: cargo test -p sul-core
+      # The optional Steamworks attachment must keep compiling. Compile only: its test binaries would
+      # link steam_api64.dll and not start without it (see docs/decisions/0003).
+      - run: cargo clippy -p sul-core --features steam --all-targets -- -D warnings
 
   ui:
     runs-on: windows-latest

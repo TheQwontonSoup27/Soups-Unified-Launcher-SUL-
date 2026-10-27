@@ -3,10 +3,13 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+mod commands;
+
 use serde::Serialize;
 use sul_core::capability::Status;
 use sul_core::discord::{IpcTransport, Presence, PublishOutcome, RichPresence};
 use sul_core::portability::{self, InstallMode};
+use tauri::Manager;
 
 /// Environment variable that overrides the detected app root (useful in development,
 /// where the executable lives in `target/debug`).
@@ -121,7 +124,26 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(DiscordState::default())
-        .invoke_handler(tauri::generate_handler![app_info, discord_set_enabled])
+        .setup(|app| {
+            let root = app_root();
+            let mode = portability::detect_mode(&root);
+            let standard = app.path().app_data_dir()?;
+            let dir = portability::data_dir(&root, mode, &standard);
+            if let Err(error) = std::fs::create_dir_all(&dir) {
+                tracing::warn!(path = %dir.display(), %error, "cannot create the data folder");
+            }
+            app.manage(commands::AppState::open(&dir.join("library.json")));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            discord_set_enabled,
+            commands::list_games,
+            commands::scan_games_command,
+            commands::get_game_matrix,
+            commands::update_feature_tick,
+            commands::launch_game_command,
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run Soups Unified Launcher");
 }

@@ -3,7 +3,7 @@
 //! The launcher runs either as a standard install or as a self-contained portable
 //! copy. Portable mode is signalled by a [`PORTABLE_MARKER`] file in the app root.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +25,20 @@ pub fn detect_mode(app_root: &Path) -> InstallMode {
         InstallMode::Portable
     } else {
         InstallMode::Standard
+    }
+}
+
+/// Folder name used for launcher data next to the app in portable mode.
+pub const PORTABLE_DATA_DIR: &str = "data";
+
+/// Where the launcher keeps its own data (the game library, settings).
+///
+/// Portable mode keeps everything inside the app folder, so the copy can be moved or deleted as one
+/// unit; a standard install uses `standard_dir`, the operating system's per-user app data folder.
+pub fn data_dir(app_root: &Path, mode: InstallMode, standard_dir: &Path) -> PathBuf {
+    match mode {
+        InstallMode::Portable => app_root.join(PORTABLE_DATA_DIR),
+        InstallMode::Standard => standard_dir.to_path_buf(),
     }
 }
 
@@ -100,6 +114,23 @@ mod tests {
 
         std::fs::write(dir.path().join(PORTABLE_MARKER), b"").unwrap();
         assert_eq!(detect_mode(dir.path()), InstallMode::Portable);
+    }
+
+    #[test]
+    fn portable_data_stays_inside_the_app_folder_and_standard_data_does_not() {
+        let root = Path::new("/apps/sul");
+        let user = Path::new("/home/me/.local/share/sul");
+
+        assert_eq!(
+            data_dir(root, InstallMode::Portable, user),
+            root.join("data"),
+            "portable: next to the app, never the user profile"
+        );
+        assert_eq!(
+            data_dir(root, InstallMode::Standard, user),
+            user,
+            "standard: the per-user data folder, never the app folder"
+        );
     }
 
     #[test]

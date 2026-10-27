@@ -52,6 +52,36 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .badge { display:inline-block; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700; background:#14161f; border:1px solid #000; color:#c9cbe0; }
 .badge-supported_tested { color:#5fd6a0; } .badge-partial { color:#6db4ff; } .badge-experimental { color:#f6c26b; }
 .badge-unsupported { color:#ff7b7b; } .badge-not_investigated { color:#c9cbe0; }
+/* Game library grid and compatibility matrix */
+.library-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.library-toolbar h3 { margin:0 0 2px; } .library-toolbar p { margin:0; }
+.btn { padding:8px 16px; border:1px solid #000; border-radius:8px; background:var(--button); color:var(--button-text); font-weight:700; cursor:pointer; }
+.btn:disabled { opacity:.55; cursor:not-allowed; }
+.btn-ghost { background:transparent; color:var(--text); border-color:var(--border); }
+.game-library-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:18px; align-items:start; margin-bottom:18px; }
+.game-card { margin:0; display:flex; flex-direction:column; gap:8px; min-width:0; }
+.game-card-missing { border-style:dashed; }
+.game-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.game-card-head h3 { margin:0; overflow-wrap:anywhere; }
+.game-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0; }
+.tag { display:inline-block; padding:1px 8px; border:1px solid var(--border); border-radius:6px; font-size:12px; font-weight:700; }
+.tag-warn { border-style:dashed; }
+.game-path { margin:0; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.game-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+.game-hint { margin:0; font-size:12px; }
+.game-notice { margin:0; font-weight:600; }
+.matrix { margin-top:6px; border-top:1px solid var(--border); padding-top:10px; }
+.matrix-error { margin:0 0 8px; font-weight:600; border-left:4px solid #b00020; padding-left:8px; }
+.matrix-rows { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.matrix-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; padding:6px 8px; border:1px solid var(--border); border-radius:8px; }
+.matrix-check { display:flex; align-items:center; gap:8px; cursor:pointer; }
+.matrix-check input { width:18px; height:18px; accent-color:var(--accent); }
+.matrix-check input:disabled, .matrix-check input:disabled + span { cursor:not-allowed; }
+.matrix-badges { display:flex; flex-wrap:wrap; gap:6px; }
+.matrix-note { flex-basis:100%; font-size:12px; }
+.badge-compat-compatible { color:#5fd6a0; } .badge-compat-unverified { color:#f6c26b; }
+.badge-compat-incompatible { color:#ff7b7b; } .badge-compat-not_applicable { color:#a9adc6; border-style:dashed; border-color:#a9adc6; }
+.matrix-row.compat-not_applicable, .matrix-row.compat-incompatible { border-style:dashed; }
 .legend { display:grid; gap:10px; margin:12px 0 0; } .legend div { display:grid; grid-template-columns:200px 1fr; gap:12px; align-items:center; } .legend dd { margin:0; color:var(--muted); }
 
 .theme-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
