@@ -39,6 +39,14 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
   eight checkboxes per matrix; a tick appears only after the saved reply; Play sends `launch_game_command {appId}`; Steam headless is disabled
   and explained on a GOG game; no console errors; no horizontal scroll at 420 px.
 
+## Verified in GitHub Actions (run 40486703642, commit 7501547, windows-latest)
+- `core`: fmt, `cargo clippy -p sul-core --all-targets -- -D warnings`, `cargo test -p sul-core`, and the new
+  `cargo clippy -p sul-core --features steam --all-targets -- -D warnings` all passed. This is the first Windows compile of the
+  `cmd /C start` launcher, the registry running-client check and the `steamworks` attachment. Compiling is not running: none of it has
+  touched a real Steam client.
+- `ui`: `npm ci`, typecheck, tests, build passed. `tauri-shell`: `npm run ui:build`, clippy and tests for `sul-tauri` passed.
+- Per-test counts for this run were not read (job and step results only).
+
 ## Verified in GitHub Actions (run 40276520399, commit 04c968f, windows-latest)
 - `core`: `cargo fmt --all --check`, `cargo clippy -p sul-core --all-targets -- -D warnings`, `cargo test -p sul-core` all passed.
   This is the first build of the merged code on Windows, including the Windows-only `WindowsRegistry` and `FixedDrives`.
