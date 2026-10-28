@@ -534,3 +534,61 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod helper_tests {
+    use super::*;
+    use crate::fsys::fake::FakeFs;
+    use access::{MemoryRegistry, s};
+
+    #[test]
+    fn only_the_sources_the_user_adds_by_hand_are_left_alone_by_scans() {
+        assert!(GameSource::Emulated.is_user_managed());
+        assert!(GameSource::Manual.is_user_managed());
+        for scanned in [
+            GameSource::Steam,
+            GameSource::Gog,
+            GameSource::Registry,
+            GameSource::DriveScan,
+        ] {
+            assert!(!scanned.is_user_managed(), "{scanned:?}");
+        }
+    }
+
+    #[test]
+    fn steam_library_roots_lists_every_library_once_and_nothing_for_a_machine_without_steam() {
+        let mut registry = MemoryRegistry::default();
+        registry.add(
+            Hive::CurrentUser,
+            View::Registry64,
+            r"SOFTWARE\Valve\Steam",
+            &[("SteamPath", s("C:/Steam"))],
+        );
+        let main = PathBuf::from(r"C:\Steam");
+        let fs = FakeFs::new().file(
+            main.join("steamapps").join("libraryfolders.vdf"),
+            r#""libraryfolders" { "0" { "path" "C:\\Steam" } "1" { "path" "D:\\SteamLibrary" } }"#,
+        );
+        assert_eq!(
+            steam_library_roots(&registry, &fs).unwrap(),
+            [main, PathBuf::from(r"D:\SteamLibrary")]
+        );
+
+        let none = steam_library_roots(&MemoryRegistry::default(), &FakeFs::new()).unwrap();
+        assert!(none.is_empty(), "{none:?}");
+    }
+
+    #[test]
+    fn registry_strings_are_expanded_from_the_environment_and_unknown_names_are_left_alone() {
+        if let Ok(path) = std::env::var("PATH") {
+            assert_eq!(expand_env("%PATH%"), path);
+            assert_eq!(expand_env("x%PATH%y"), format!("x{path}y"));
+        }
+        assert_eq!(
+            expand_env("%SUL_SURELY_NOT_A_VARIABLE%\\Games"),
+            "%SUL_SURELY_NOT_A_VARIABLE%\\Games"
+        );
+        assert_eq!(expand_env("no variables here"), "no variables here");
+        assert_eq!(expand_env("100%"), "100%");
+    }
+}

@@ -265,3 +265,76 @@ mod tests {
         assert!(blank.validate(|| "x".into()).is_err());
     }
 }
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+
+    fn some(text: &str) -> Option<String> {
+        Some(text.to_owned())
+    }
+
+    #[test]
+    fn every_label_has_its_own_help_line() {
+        let lines: Vec<&str> = Status::ALL.iter().map(|s| s.help()).collect();
+        assert!(lines.iter().all(|line| !line.is_empty()));
+        let distinct: std::collections::BTreeSet<_> = lines.iter().collect();
+        assert_eq!(distinct.len(), Status::ALL.len());
+    }
+
+    #[test]
+    fn supported_and_tested_needs_a_test_date_and_evidence_and_names_the_entry() {
+        let missing_date = check_evidence(Status::SupportedTested, &None, &some("run 1"), || {
+            "Steam launch".into()
+        })
+        .unwrap_err();
+        assert!(
+            missing_date.to_string().contains("Steam launch"),
+            "{missing_date}"
+        );
+
+        assert!(
+            check_evidence(Status::SupportedTested, &some("2026-10-27"), &None, || {
+                "x".into()
+            })
+            .is_err()
+        );
+        // Blank text is as good as nothing.
+        assert!(
+            check_evidence(Status::SupportedTested, &some("  "), &some("run 1"), || {
+                "x".into()
+            })
+            .is_err()
+        );
+        assert!(
+            check_evidence(
+                Status::SupportedTested,
+                &some("2026-10-27"),
+                &some("\t"),
+                || { "x".into() }
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn complete_evidence_passes_without_building_the_error_text() {
+        let ok = check_evidence(
+            Status::SupportedTested,
+            &some("2026-10-27"),
+            &some("run 1"),
+            || panic!("the description is only needed for a failure"),
+        );
+        assert!(ok.is_ok());
+    }
+
+    #[test]
+    fn the_other_labels_never_need_evidence() {
+        for status in Status::ALL
+            .into_iter()
+            .filter(|s| *s != Status::SupportedTested)
+        {
+            assert!(check_evidence(status, &None, &None, || panic!("no error expected")).is_ok());
+        }
+    }
+}

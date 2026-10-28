@@ -119,6 +119,20 @@ fn publish_idle(rp: &mut RichPresence<IpcTransport>, presence: &Presence) -> Res
     }
 }
 
+/// Every command the webview may call. One list, used by the app and by the IPC tests, so a command
+/// cannot be tested without being registered (or registered without being reachable).
+fn handlers<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        app_info,
+        discord_set_enabled,
+        commands::list_games,
+        commands::scan_games_command,
+        commands::get_game_matrix,
+        commands::update_feature_tick,
+        commands::launch_game_command,
+    ]
+}
+
 pub fn run() {
     tracing_subscriber::fmt::init();
 
@@ -135,18 +149,13 @@ pub fn run() {
             app.manage(commands::AppState::open(&dir.join("library.json")));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            app_info,
-            discord_set_enabled,
-            commands::list_games,
-            commands::scan_games_command,
-            commands::get_game_matrix,
-            commands::update_feature_tick,
-            commands::launch_game_command,
-        ])
+        .invoke_handler(handlers())
         .run(tauri::generate_context!())
         .expect("failed to run Soups Unified Launcher");
 }
+
+#[cfg(test)]
+mod ipc_tests;
 
 #[cfg(test)]
 mod tests {

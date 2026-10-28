@@ -265,3 +265,38 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod hash_tests {
+    use super::*;
+
+    #[test]
+    fn short_hash_is_a_fixed_function_of_its_input() {
+        // Ids built from it are stored in the library file, so it must never change between releases.
+        assert_eq!(short_hash(""), "4fd0bfc1");
+        assert_eq!(short_hash("a"), "296230c0");
+        assert_eq!(short_hash("abc"), "e25ef552");
+        assert_eq!(short_hash("Helldivers 2"), "0eda6bab");
+        assert_eq!(short_hash("steam-553850"), "be4b10d0");
+        assert_eq!(
+            short_hash("h\u{e9}llo"),
+            "355db7ff",
+            "hashes the UTF-8 bytes"
+        );
+    }
+
+    #[test]
+    fn short_hash_is_eight_lowercase_hex_digits_and_tells_near_inputs_apart() {
+        for input in ["", "x", "Half-Life 2", "C:\\Games\\Foo"] {
+            let h = short_hash(input);
+            assert_eq!(h.len(), 8, "{h}");
+            assert!(
+                h.chars()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+                "{h}"
+            );
+        }
+        assert_ne!(short_hash("Foo Game"), short_hash("Foo game"));
+        assert_ne!(short_hash("ab"), short_hash("ba"));
+    }
+}
