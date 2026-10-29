@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-27 (Steam manager, library IPC commands, Game Library grid; on branch `feature/steam-ipc-library`)
+**Last updated:** 2026-10-28 (tests for the code that had none, merged into `main` at a19a4ba)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -27,7 +27,43 @@ roadmap modules as labelled placeholders, Team27 theme with contrast-checked tok
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
 
-## Verified (actually run, 2026-10-27, branch `feature/steam-ipc-library`)
+## Verified 2026-10-28 (merged `main`, commit a19a4ba)
+Linux container, Node 22, cargo 1.97. Exact commands and results:
+- `cargo fmt --all --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean.
+  `cargo clippy -p sul-core --features steam --all-targets -- -D warnings` → clean.
+- `cargo test --workspace` → 208 passed, 0 failed: 150 `sul-core` unit tests, 16 in `tests/core.rs`, 16 in `tests/discord.rs`,
+  6 in `tests/steam.rs`, 20 in `sul-tauri` (14 of them send real IPC messages to the commands through Tauri's mock runtime, using the
+  real command list). `tests/windows_system.rs` compiles to nothing off Windows, so it ran 0 tests here.
+- `npm ci` → 0 vulnerabilities. `npm run ui:typecheck` → clean. `npm test --workspace ui` → 164 tests: 163 passed, 0 failed, 1 `todo`
+  (the wallpaper defect below). `npm run ui:build` → built. `npm audit` → 0 vulnerabilities.
+- The new UI tests run in happy-dom (a DOM simulation), not in a real browser or a real Tauri window. The new tests were spot-checked by
+  breaking the code and confirming a test failed.
+- New dev dependencies: `happy-dom` 21.0.4 (older versions have GHSA-834v-8h66-3h79), `@happy-dom/global-registrator`, `fake-indexeddb`.
+
+## Verified in GitHub Actions (windows-latest)
+- `main` a19a4ba, run 40804766886: `core`, `ui`, `tauri-shell` all succeeded. The branch before the merge (a366110, run 40804049014) also did.
+- This is the first Windows run of `crates/sul-core/tests/windows_system.rs`: it reads real registry keys and the drive list, runs the real
+  scan and saves/reopens a library. The runner has no games or Steam, so this checks shape, safety and consistency, not whether the
+  scan finds the right games.
+- `cargo test -p sul-tauri` ran to completion on Windows, including the IPC tests.
+- CI now also builds and links the real app binary (`cargo build -p sul-tauri`) and checks that the Common Controls v6 manifest is inside the
+  `.exe`. Nothing launched the app.
+- Per-test counts were not read: downloads of raw job logs are refused (HTTP 403). Only step results and timings were read.
+- The first run on the branch (40765233357, f06d318) failed, and testing found two real defects, both fixed: (1) an unused import in
+  `windows_system.rs` that failed `clippy -D warnings` on Windows; (2) the `sul-tauri` test executable would not start on Windows
+  (`0xc0000139`, `STATUS_ENTRYPOINT_NOT_FOUND`) because only the app binary got the Common Controls v6 manifest that `tao`/`wry` need.
+  `src-tauri/build.rs` now gives that manifest to the linker, so every executable of the package carries it; the manifest file is
+  `src-tauri/windows-app-manifest.xml` (identical to tauri-build's default).
+- When a cargo step fails, `.github/scripts/surface-failure.ps1` puts the cause in a run annotation (readable with
+  `gh api repos/<owner>/<repo>/check-runs/<job id>/annotations`).
+
+## Known defects found while testing (not fixed; no `ui/src` code was changed in this session)
+- Wallpaper gallery: `ui/public/wallpapers/manifest.json` lists 19 wallpapers but the images are git-ignored (licences unconfirmed), so a fresh
+  clone shows 19 broken tiles. (This file used to say the gallery would be empty; that was wrong.) Kept visible as a `todo` test in
+  `ui/tests/assets.test.ts`.
+- The sidebar search box has no handler: typing in it does nothing.
+
+## Earlier: verified 2026-10-27 (branch `feature/steam-ipc-library`, before the new tests)
 Linux container, Node 22, cargo 1.97. Exact commands and results:
 - `cargo fmt --all -- --check` → clean.
 - `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core --features steam --all-targets -- -D warnings` → clean
@@ -71,11 +107,16 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
 - Discord against a live Discord client; any of this against a real game install beyond the owner's scan; no game adapter exists.
 - Helldivers 2 7.1.1 isolation/offline launch: Not investigated.
 - Icons are the Team27 set, not reviewed as final branding. Wallpaper JPEGs are git-ignored (licences unconfirmed; docs in
-  `ui/public/wallpapers/README.md`), so the gallery is empty on a fresh clone.
+  `ui/public/wallpapers/README.md`), so the gallery shows 19 broken tiles on a fresh clone (see the known defects above).
+- `SystemOpener` (the real `cmd /C start steam://run/<id>`) is deliberately not run in CI: it would open a URL on the runner. The IPC tests
+  use a fake opener.
+- The Windows adapters have run only on a GitHub runner (no games, no Steam), never on the owner's machine in this session.
 - Persistent Steam credentials: decided against (decision 0003). The Direct3D/Vulkan overlay hooks still conflict with `CLAUDE.md` (no
   anti-cheat bypass); not started, to be settled when that step comes up.
 
 ## Branch and safety net
+- `test/untested-coverage` was merged into `main` with a merge commit (a19a4ba) at the owner's request, after its CI was green. The branch
+  is still on GitHub. `feature/steam-ipc-library` was merged earlier (0204541).
 - `step-1.5` was merged into `main` by fast-forward (9ece116 → 04c968f) at the owner's request; both branches are on GitHub.
   The legacy state is commit `9ece116`, tagged locally as `legacy-pre-step-1.5`. Pushing that tag was refused (HTTP 403) from the
   authoring session, so it is not on GitHub; see `docs/decisions/0002-step-1-5-consolidation.md`.
@@ -91,7 +132,8 @@ Left in place on purpose: the Windows Store icon sizes in `src-tauri/icons/` (st
 `design-references/` at the repo root, which does not exist; the path in those two files is the mismatch, not the images).
 
 ## Next action
-1. On Windows: `git fetch`, `git checkout feature/steam-ipc-library`, `npm install`, `cargo test --workspace`, `npm run dev`; press
-   "Scan for games", open a card's Compatibility, tick a box, and press Play on a Steam game; report what you see.
+1. On Windows: `git checkout main`, `git pull`, `npm install`, `cargo test --workspace` (it runs more tests than the Linux container, because
+   `tests/windows_system.rs` only runs on Windows), `npm run dev`; press "Scan for games", open a card's Compatibility, tick a box, and press
+   Play on a Steam game; report what you see.
 2. Then the per-game hub (Play, tabs, per-game settings), and the public player-metrics fetch by SteamID64.
 3. Helldivers 2 Build Manager stays a separate adapter track.

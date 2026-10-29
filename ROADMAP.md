@@ -6,6 +6,8 @@ Staged priorities, not promises. Update status only with evidence.
    registry scanner, compatibility matrix, library index, storage isolator, updater, portability, templates, safety core, Discord
    presence (Step 1 and Step 1.5). Redundant legacy files removed; see `PROJECT_STATUS.md`.
    Game Library grid with the tick-and-compatibility matrix and Steam Play is built (needs a run on Windows).
+   Test coverage was extended on 2026-10-28 (Section 1 UI, the Tauri commands over IPC, the Windows registry and drive adapters); CI on
+   `main` passes on Windows. The known defects it found (wallpaper gallery, search box) are listed in `PROJECT_STATUS.md` and not yet fixed.
    **Next slice:** the per-game hub, then public player metrics by SteamID64.
 2. Build management: import/verify, original/optimized/experimental slots, rollback; HD2 7.1.1 isolation research (separate adapter track).
 3. Mod management: profiles, ownership-aware deploy/purge, dry-run, conflicts, backup/recovery.
