@@ -669,3 +669,22 @@ mod tests {
         assert!(!text.contains("claim"), "absent claims are not written");
     }
 }
+
+#[cfg(test)]
+mod enabling_tests {
+    use super::*;
+
+    #[test]
+    fn only_unverified_and_compatible_features_may_be_ticked() {
+        assert!(Compatibility::Unverified.allows_enabling());
+        assert!(Compatibility::Compatible.allows_enabling());
+        assert!(!Compatibility::Incompatible.allows_enabling());
+        assert!(!Compatibility::NotApplicable.allows_enabling());
+    }
+
+    #[test]
+    fn a_new_feature_is_unverified_and_therefore_allowed() {
+        assert_eq!(Compatibility::default(), Compatibility::Unverified);
+        assert!(Compatibility::default().allows_enabling());
+    }
+}

@@ -268,3 +268,20 @@ fn publish_before_connect_is_an_error_not_a_panic() {
     rp.set_enabled(true).unwrap();
     assert!(rp.publish(Status::Experimental, &sample()).is_err());
 }
+
+#[test]
+fn opcodes_convert_to_their_wire_numbers_and_back() {
+    let all = [
+        (Opcode::Handshake, 0),
+        (Opcode::Frame, 1),
+        (Opcode::Close, 2),
+        (Opcode::Ping, 3),
+        (Opcode::Pong, 4),
+    ];
+    for (opcode, number) in all {
+        assert_eq!(opcode.to_u32(), number);
+        assert_eq!(Opcode::from_u32(number), Some(opcode));
+    }
+    assert_eq!(Opcode::from_u32(5), None);
+    assert_eq!(Opcode::from_u32(u32::MAX), None);
+}

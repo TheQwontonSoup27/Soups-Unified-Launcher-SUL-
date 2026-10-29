@@ -198,3 +198,33 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod filter_tests {
+    use super::*;
+
+    #[test]
+    fn the_default_filter_takes_every_section() {
+        for filter in [ImportFilter::all(), ImportFilter::default()] {
+            assert!(filter.allows("theme"));
+            assert!(filter.allows(""));
+            assert!(filter.allows("anything else"));
+        }
+    }
+
+    #[test]
+    fn a_named_filter_takes_only_the_named_sections() {
+        let filter = ImportFilter::only(["theme", "background"]);
+        assert!(filter.allows("theme"));
+        assert!(filter.allows("background"));
+        assert!(!filter.allows("discord"));
+        assert!(!filter.allows("Theme"), "section names are exact");
+    }
+
+    #[test]
+    fn an_empty_selection_takes_nothing_rather_than_everything() {
+        let filter = ImportFilter::only(Vec::<String>::new());
+        assert!(!filter.allows("theme"));
+        assert_ne!(filter, ImportFilter::all());
+    }
+}

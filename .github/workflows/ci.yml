@@ -12,11 +12,31 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all --check
-      - run: cargo clippy -p sul-core --all-targets -- -D warnings
-      - run: cargo test -p sul-core
+      # The three cargo steps below name the cause of a failure in an annotation, because the raw
+      # logs of a run cannot be downloaded. See .github/scripts/surface-failure.ps1.
+      - name: clippy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo clippy -p sul-core --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath clippy.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 clippy.log; exit $code }
+      - name: tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo test -p sul-core 2>&1 | Tee-Object -FilePath test.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 test.log; exit $code }
       # The optional Steamworks attachment must keep compiling. Compile only: its test binaries would
       # link steam_api64.dll and not start without it (see docs/decisions/0003).
-      - run: cargo clippy -p sul-core --features steam --all-targets -- -D warnings
+      - name: clippy with the steam feature
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo clippy -p sul-core --features steam --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath steam.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 steam.log; exit $code }
 
   ui:
     runs-on: windows-latest
@@ -41,18 +61,29 @@ jobs:
       - run: npm ci
       # The Tauri build script needs the built UI (`frontendDist`).
       - run: npm run ui:build
-      - name: clippy and tests for the desktop wrapper (errors surfaced as annotations)
+      - name: clippy and tests for the desktop wrapper
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
           cargo clippy -p sul-tauri --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath check.log
           $code = $LASTEXITCODE
           if ($code -eq 0) {
-            cargo test -p sul-tauri 2>&1 | Tee-Object -FilePath test.log -Append
+            cargo test -p sul-tauri 2>&1 | Tee-Object -FilePath test.log
             $code = $LASTEXITCODE
           }
-          if ($code -ne 0) {
-            $lines = Get-Content check.log, test.log -ErrorAction SilentlyContinue | Where-Object { $_ -match 'error|failed|not found|could not' } | Select-Object -First 12
-            foreach ($l in $lines) { Write-Host "::error::$($l -replace '[\r\n%]',' ')" }
-            exit $code
-          }
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 check.log, test.log; exit $code }
+      # clippy only type-checks the app binary, so nothing above links it. build.rs hands the Common
+      # Controls v6 manifest to the linker instead of to tauri-build; link the real binary and check
+      # that the manifest is in it. (The test executable proves it for itself: it only starts with it.)
+      - name: build the app binary and check it carries the manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo build -p sul-tauri --message-format=short 2>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 build.log; exit $code }
+          $exe = 'target\debug\sul-tauri.exe'
+          if (-not (Test-Path $exe)) { Write-Host "::error::$exe was not built"; exit 1 }
+          $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($exe))
+          if (-not $text.Contains('Microsoft.Windows.Common-Controls')) { Write-Host "::error::$exe has no Common Controls manifest"; exit 1 }
+          Write-Host "$exe carries the Common Controls v6 manifest"

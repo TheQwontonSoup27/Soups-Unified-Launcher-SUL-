@@ -235,3 +235,57 @@ fn logger_redacts_secrets_on_disk() {
     assert!(text.contains("[REDACTED]") && text.contains("soup"));
     assert_eq!(redact(&json!({"api_key": 1}))["api_key"], "[REDACTED]");
 }
+
+#[test]
+fn hash_file_matches_the_published_sha256_vectors() {
+    use sul_core::manifest::hash_file;
+    let dir = tempfile::tempdir().unwrap();
+
+    let empty = dir.path().join("empty");
+    fs::write(&empty, b"").unwrap();
+    assert_eq!(
+        hash_file(&empty).unwrap(),
+        (
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_owned(),
+            0
+        )
+    );
+
+    let abc = dir.path().join("abc");
+    fs::write(&abc, b"abc").unwrap();
+    assert_eq!(
+        hash_file(&abc).unwrap(),
+        (
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".to_owned(),
+            3
+        )
+    );
+}
+
+#[test]
+fn hash_file_reads_files_larger_than_its_buffer_in_pieces() {
+    use sul_core::manifest::hash_file;
+    // 2 MiB + 12345 bytes: more than two reads of the 1 MiB buffer, with a short last read.
+    let data: Vec<u8> = (0..(2usize << 20) + 12_345)
+        .map(|i| ((i * 31 + 7) % 256) as u8)
+        .collect();
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("big.bin");
+    fs::write(&file, &data).unwrap();
+    assert_eq!(
+        hash_file(&file).unwrap(),
+        (
+            "8a7235b1459d77c512e367b38b2a4170a6d5bdb240b5d577b56726bc6f1a8b48".to_owned(),
+            2_109_497
+        )
+    );
+}
+
+#[test]
+fn hash_file_of_a_missing_file_is_an_error_that_names_the_file() {
+    use sul_core::manifest::hash_file;
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("nope.bin");
+    let error = hash_file(&missing).unwrap_err();
+    assert!(error.to_string().contains("nope.bin"), "{error}");
+}
