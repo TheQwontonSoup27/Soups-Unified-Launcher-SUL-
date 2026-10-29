@@ -300,6 +300,7 @@ impl<T: Transport> RichPresence<T> {
 
 // ---- real transport: the Windows named pipe ----
 
+#[cfg(not(windows))]
 const NOT_WINDOWS: &str = "Discord presence is only implemented for Windows";
 
 /// Discord's local IPC pipe. SUL runs on Windows only, so the named pipe is the only transport;
