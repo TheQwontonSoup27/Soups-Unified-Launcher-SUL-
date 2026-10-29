@@ -72,3 +72,18 @@ jobs:
             $code = $LASTEXITCODE
           }
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 check.log, test.log; exit $code }
+      # clippy only type-checks the app binary, so nothing above links it. build.rs hands the Common
+      # Controls v6 manifest to the linker instead of to tauri-build; link the real binary and check
+      # that the manifest is in it. (The test executable proves it for itself: it only starts with it.)
+      - name: build the app binary and check it carries the manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo build -p sul-tauri --message-format=short 2>&1 | Tee-Object -FilePath build.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 build.log; exit $code }
+          $exe = 'target\debug\sul-tauri.exe'
+          if (-not (Test-Path $exe)) { Write-Host "::error::$exe was not built"; exit 1 }
+          $text = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($exe))
+          if (-not $text.Contains('Microsoft.Windows.Common-Controls')) { Write-Host "::error::$exe has no Common Controls manifest"; exit 1 }
+          Write-Host "$exe carries the Common Controls v6 manifest"
