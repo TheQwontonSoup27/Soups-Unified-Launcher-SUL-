@@ -10,8 +10,8 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use sul_core::registry::{
-    DriveLister, FixedDrives, GameScanner, Hive, KeyPath, RegistryAccess, ScanOptions, View,
-    WindowsRegistry, paths, system_scanner,
+    DriveLister, FixedDrives, Hive, KeyPath, RegistryAccess, ScanOptions, View, WindowsRegistry,
+    paths, system_scanner,
 };
 use sul_core::service::LibraryService;
 use sul_core::steam::{ClientProbe, RegistryProbe, SteamManager};
