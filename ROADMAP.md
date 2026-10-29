@@ -7,7 +7,7 @@ Staged priorities, not promises. Update status only with evidence.
    presence (Step 1 and Step 1.5). Redundant legacy files removed; see `PROJECT_STATUS.md`.
    Game Library grid with the tick-and-compatibility matrix and Steam Play is built (needs a run on Windows).
    Test coverage was extended on 2026-10-28 (Section 1 UI, the Tauri commands over IPC, the Windows registry and drive adapters); CI on
-   `main` passes on Windows. The known defects it found (wallpaper gallery, search box) are listed in `PROJECT_STATUS.md` and not yet fixed.
+   `main` passes on Windows. The defects it found (wallpaper gallery, search box, tab strip) are fixed on branch `fix/section1-defects-windows-only`, with the Windows-only cleanup; not yet merged. See `PROJECT_STATUS.md`.
    **Next slice:** the per-game hub, then public player metrics by SteamID64.
 2. Build management: import/verify, original/optimized/experimental slots, rollback; HD2 7.1.1 isolation research (separate adapter track).
 3. Mod management: profiles, ownership-aware deploy/purge, dry-run, conflicts, backup/recovery.
