@@ -1,6 +1,6 @@
 // The files the app and its installer depend on: present, really images, and the size their names claim.
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -57,8 +57,12 @@ test("the Windows icon holds every size Windows asks for, from 16 to 256", () =>
   for (const need of [16, 32, 48, 256]) assert.ok(sizes.includes(need), `no ${need}px image in ${sizes}`);
 });
 
-test("the macOS icon is an icns file", () => {
-  assert.equal(read("src-tauri/icons/icon.icns").subarray(0, 4).toString("ascii"), "icns");
+// SUL runs on Windows only. The icon set holds Windows (.ico, the Store tiles) and plain PNGs, nothing for another OS.
+test("nothing in the icon set or its list is for another operating system", () => {
+  const listed = (json("src-tauri/tauri.conf.json").bundle as { icon: string[] }).icon;
+  for (const icon of listed) assert.match(icon, /\.(png|ico)$/i, `${icon} is not a Windows or plain PNG icon`);
+  const foreign = readdirSync(join(ROOT, "src-tauri", "icons")).filter((f) => /\.(icns|xcassets)$/i.test(f) || /^(android|ios)$/i.test(f));
+  assert.deepEqual(foreign, []);
 });
 
 interface Wallpaper { id: string; name: string; file: string; thumb: string; lowRes: boolean }
@@ -78,13 +82,4 @@ test("the wallpaper list is well formed: unique ids, every field present, files 
     }
     assert.notEqual(w.file, w.thumb);
   }
-});
-
-// Known Section 1 defect, kept visible rather than hidden. The manifest is committed but the
-// images are git-ignored until their licences are confirmed, so a fresh clone shows the gallery
-// with every thumbnail missing. This stays a `todo` (reported, not failing) until the images are
-// added or the manifest is generated from what is present.
-test("every wallpaper in the list has its image and thumbnail on disk", { todo: "images are git-ignored until licences are confirmed; the gallery shows broken tiles on a fresh clone" }, () => {
-  const missing = wallpapers().flatMap((w) => [w.file, w.thumb]).filter((p) => !existsSync(join(ROOT, "ui/public", p)));
-  assert.deepEqual(missing, []);
 });

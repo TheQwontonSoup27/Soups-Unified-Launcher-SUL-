@@ -4,9 +4,12 @@ import { PresenceMessage, PresenceToggle } from "./PresenceToggle";
 interface SidebarProps {
   active: ViewId;
   onSelect: (id: ViewId) => void;
+  /** What is typed in the search box, and what to do when it changes. */
+  query: string;
+  onSearch: (query: string) => void;
 }
 
-export default function Sidebar({ active, onSelect }: SidebarProps) {
+export default function Sidebar({ active, onSelect, query, onSearch }: SidebarProps) {
   const renderItem = (item: NavItem) => (
     <li key={item.id}>
       <button
@@ -25,7 +28,17 @@ export default function Sidebar({ active, onSelect }: SidebarProps) {
       {/* App icon, global search, and the Discord presence switch sit on one row, in that order. */}
       <div className="sidebar-top">
         <img className="app-icon" src="logo.png" alt="Soups Unified Launcher" />
-        <input className="global-search" type="search" placeholder="Search" aria-label="Global search" />
+        <input
+          className="global-search"
+          type="search"
+          placeholder="Search games"
+          aria-label="Search games"
+          value={query}
+          onChange={(e) => onSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onSearch("");
+          }}
+        />
         <PresenceToggle />
       </div>
       <PresenceMessage />

@@ -28,4 +28,4 @@ Windows 10/11 already ships WebView2, which Tauri uses, so no extra webview inst
 ## Status of these steps
 Step 5 has been run by the owner on Windows (before Step 1.5: 78 tests passed and 38 games mapped by the registry scanner).
 Steps 4, 6 and 7 have **not** been run on Windows by the author; record the first verified run in `PROJECT_STATUS.md`.
-`cargo test --workspace` also builds the Tauri shell, which needs WebView2 on Windows (present) and the WebKitGTK packages on Linux.
+`cargo test --workspace` also builds the Tauri shell, which needs WebView2 (present on current Windows).

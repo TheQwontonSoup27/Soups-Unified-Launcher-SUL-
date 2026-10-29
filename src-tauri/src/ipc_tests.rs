@@ -102,7 +102,7 @@ impl Shell {
             cmd: cmd.into(),
             callback: CallbackFn(0),
             error: CallbackFn(1),
-            url: if cfg!(any(windows, target_os = "android")) {
+            url: if cfg!(windows) {
                 "http://tauri.localhost"
             } else {
                 "tauri://localhost"

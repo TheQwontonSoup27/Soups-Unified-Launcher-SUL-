@@ -35,7 +35,9 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .nav-item[aria-current="page"] { background:var(--accent); color:var(--on-accent); }
 
 .content { display:flex; flex-direction:column; padding:24px 32px; overflow-y:auto; }
-.content > :not(.scrim) { max-width:1100px; }
+/* `.content` is a column of fixed height that scrolls. A block with `overflow` set (the tab strip) would
+   otherwise be shrunk to nothing when the page is taller than the window, so no block may shrink. */
+.content > :not(.scrim) { max-width:1100px; flex-shrink:0; }
 .content > .page-header { align-self:flex-start; }
 .page-header { display:inline-block; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:6px 18px 8px; margin-bottom:18px; }
 .page-header h1 { margin:0; font-size:26px; } .page-header p { margin:0; color:var(--muted); }

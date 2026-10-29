@@ -1,4 +1,4 @@
-import { click, installTauri, mount, one, resetBrowser, settle, withText } from "./dom";
+import { absent, click, installTauri, mount, one, resetBrowser, settle, withText } from "./dom";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { tauriLibraryApi, type FeatureId, type GameView, type LibraryApi, type MatrixView, type ScanView } from "../src/lib/library";
@@ -62,7 +62,7 @@ describe("the Game Library page, clicked through", () => {
     const { host, unmount } = await mount(<GameLibrary api={api} />);
     await settle();
     assert.match(one(host, "[aria-label=Scan] p[role=status]").textContent ?? "", /No games yet/);
-    assert.equal(host.querySelector("[aria-label='Your games']"), null);
+    absent(host.querySelector("[aria-label='Your games']"));
 
     await click(withText(host, "button", "Scan for games"));
     assert.deepEqual(calls, ["list", "scan"]);
@@ -78,7 +78,7 @@ describe("the Game Library page, clicked through", () => {
 
     await click(withText(card(host, "Helldivers 2"), "button", "Compatibility"));
     assert.ok(card(host, "Helldivers 2").querySelector(".matrix"));
-    assert.equal(card(host, "Alpha").querySelector(".matrix"), null, "the other card stays closed");
+    absent(card(host, "Alpha").querySelector(".matrix"), "the other card stays closed");
     assert.equal(card(host, "Helldivers 2").querySelectorAll("input[type=checkbox]").length, 8);
     assert.ok(calls.includes("matrix steam-553850"));
 
@@ -89,7 +89,7 @@ describe("the Game Library page, clicked through", () => {
     assert.equal(withText(card(host, "Helldivers 2"), "label span", "Mods").parentElement!.querySelector("input")!.checked, true);
 
     await click(withText(card(host, "Helldivers 2"), "button", "Hide compatibility"));
-    assert.equal(card(host, "Helldivers 2").querySelector(".matrix"), null);
+    absent(card(host, "Helldivers 2").querySelector(".matrix"));
     unmount();
   });
 
@@ -101,7 +101,7 @@ describe("the Game Library page, clicked through", () => {
     const headless = withText(card(host, "Alpha"), "label span", "Steam headless launch").parentElement!.querySelector("input")!;
     assert.equal(headless.disabled, true, "the checkbox is locked for a non-Steam game");
     assert.match(card(host, "Alpha").textContent ?? "", /Steam titles only/);
-    assert.equal(card(host, "Helldivers 2").querySelector("[role=alert]"), null);
+    absent(card(host, "Helldivers 2").querySelector("[role=alert]"));
     unmount();
   });
 
@@ -114,7 +114,7 @@ describe("the Game Library page, clicked through", () => {
     await click(mods());
     assert.equal(mods().checked, false, "the box shows what was saved, not what was clicked");
     assert.equal(one(card(host, "Helldivers 2"), "[role=alert]").textContent, "Mods cannot be enabled yet.");
-    assert.equal(card(host, "Alpha").querySelector("[role=alert]"), null);
+    absent(card(host, "Alpha").querySelector("[role=alert]"));
     unmount();
   });
 
@@ -125,7 +125,7 @@ describe("the Game Library page, clicked through", () => {
     await click(withText(card(host, "Helldivers 2"), "button", "Play"));
     assert.ok(calls.includes("play 553850"));
     assert.equal(one(card(host, "Helldivers 2"), "[role=status]").textContent, "Asked Steam to start Helldivers 2.");
-    assert.equal(card(host, "Alpha").querySelector(".game-notice"), null);
+    absent(card(host, "Alpha").querySelector(".game-notice"));
     unmount();
   });
 
@@ -195,6 +195,55 @@ describe("the real bridge to the desktop app", () => {
     await settle();
     await click(withText(card(host, "Helldivers 2"), "button", "Play"));
     assert.equal(one(card(host, "Helldivers 2"), "[role=alert]").textContent, "a failure from Rust");
+    unmount();
+  });
+});
+
+describe("the Game Library page, narrowed by the search", () => {
+  const status = (host: HTMLElement) => one(host, "[aria-label=Scan] p[role=status]").textContent;
+  const shownGames = (host: HTMLElement) => [...host.querySelectorAll("[aria-label='Your games'] .game-card h3")].map((h) => h.textContent);
+
+  test("only the matching games are shown, and the page says how many of how many", async () => {
+    const { api } = fakeBackend([steamGame, gogGame]);
+    const { host, unmount } = await mount(<GameLibrary api={api} query="alpha" />);
+    await settle();
+    assert.deepEqual(shownGames(host), ["Alpha"]);
+    assert.equal(status(host), "Showing 1 of 2 games matching “alpha”.");
+    unmount();
+  });
+
+  test("a search that matches nothing says so and shows no cards", async () => {
+    const { api } = fakeBackend([steamGame, gogGame]);
+    const { host, unmount } = await mount(<GameLibrary api={api} query="  zzz " />);
+    await settle();
+    assert.equal(host.querySelectorAll(".game-card").length, 0);
+    assert.equal(status(host), "No games match “zzz”.");
+    unmount();
+  });
+
+  test("a blank search changes nothing", async () => {
+    const { api } = fakeBackend([steamGame, gogGame]);
+    const { host, unmount } = await mount(<GameLibrary api={api} query="   " />);
+    await settle();
+    assert.deepEqual(shownGames(host), ["Helldivers 2", "Alpha"]);
+    assert.match(status(host) ?? "", /Scans only read/);
+    unmount();
+  });
+
+  test("with no games saved yet the page still invites a scan, whatever is typed", async () => {
+    const { api } = fakeBackend();
+    const { host, unmount } = await mount(<GameLibrary api={api} query="alpha" />);
+    await settle();
+    assert.match(status(host) ?? "", /No games yet/);
+    unmount();
+  });
+
+  test("a card that stays visible keeps working: Compatibility opens its matrix", async () => {
+    const { api, calls } = fakeBackend([steamGame, gogGame]);
+    const { host, unmount } = await mount(<GameLibrary api={api} query="hell" />);
+    await settle();
+    await click(withText(card(host, "Helldivers 2"), "button", "Compatibility"));
+    assert.ok(calls.includes("matrix steam-553850"), calls.join(", "));
     unmount();
   });
 });

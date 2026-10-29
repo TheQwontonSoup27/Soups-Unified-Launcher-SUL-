@@ -285,3 +285,14 @@ fn opcodes_convert_to_their_wire_numbers_and_back() {
     assert_eq!(Opcode::from_u32(5), None);
     assert_eq!(Opcode::from_u32(u32::MAX), None);
 }
+
+/// The real transport is the Windows named pipe; anywhere else it says so instead of opening a socket.
+#[cfg(not(windows))]
+#[test]
+fn off_windows_the_real_transport_says_it_is_unsupported() {
+    assert!(matches!(
+        IpcTransport::connect(),
+        Err(sul_core::Error::Unsupported(_))
+    ));
+    assert!(IpcTransport::connect().is_err());
+}

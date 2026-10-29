@@ -9,6 +9,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+use sul_core::discord::IpcTransport;
 use sul_core::registry::{
     DriveLister, FixedDrives, Hive, KeyPath, RegistryAccess, ScanOptions, View, WindowsRegistry,
     paths, system_scanner,
@@ -242,4 +243,14 @@ fn a_real_scan_is_saved_and_survives_reopening_the_library() {
         "what was found is what comes back after a restart"
     );
     assert!(reopened.games().iter().all(|g| g.present));
+}
+
+#[test]
+fn looking_for_discord_without_it_running_is_an_error_not_a_panic() {
+    // Whether Discord runs on the machine is not known here. If it does, the pipe opens (and is closed
+    // again without a word); if it does not, the answer is an error that says so.
+    match IpcTransport::connect() {
+        Ok(_) => {}
+        Err(error) => assert!(error.to_string().contains("Discord"), "{error}"),
+    }
 }

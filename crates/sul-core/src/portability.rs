@@ -118,8 +118,8 @@ mod tests {
 
     #[test]
     fn portable_data_stays_inside_the_app_folder_and_standard_data_does_not() {
-        let root = Path::new("/apps/sul");
-        let user = Path::new("/home/me/.local/share/sul");
+        let root = Path::new(r"C:\Apps\SUL");
+        let user = Path::new(r"C:\Users\me\AppData\Roaming\SUL");
 
         assert_eq!(
             data_dir(root, InstallMode::Portable, user),

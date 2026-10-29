@@ -1,4 +1,4 @@
-import { click, installTauri, mount, one, resetBrowser, settle, stubFetch, withText, act } from "./dom";
+import { absent, click, installTauri, keyOn, mount, one, resetBrowser, settle, stubFetch, type, withText, act } from "./dom";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { App } from "../src/App";
@@ -6,6 +6,7 @@ import { Splash } from "../src/components/Splash";
 import { TitleBar } from "../src/components/TitleBar";
 import { getAppInfo, getInvoker, getWindowControls } from "../src/lib/backend";
 import { SIDEBAR_MODULES } from "../src/modules/registry";
+import { gogGame, steamGame } from "./fixtures";
 
 let tauri: ReturnType<typeof installTauri> | null = null;
 let undo: Array<() => void> = [];
@@ -31,9 +32,9 @@ describe("splash", () => {
     assert.equal(splash.getAttribute("role"), "img");
     assert.equal(splash.getAttribute("aria-label"), "Soups Unified Launcher, Team27");
     assert.equal(one(splash, "img").getAttribute("src"), "logo.png");
-    assert.equal(host.querySelector(".shell"), null);
+    absent(host.querySelector(".shell"));
     await click(splash);
-    assert.equal(host.querySelector(".splash"), null);
+    absent(host.querySelector(".splash"));
     assert.ok(host.querySelector(".shell"));
     unmount();
   });
@@ -42,14 +43,14 @@ describe("splash", () => {
     const { host, unmount } = await mount(<App splashMs={40} />);
     assert.ok(host.querySelector(".splash"));
     await wait(120);
-    assert.equal(host.querySelector(".splash"), null);
+    absent(host.querySelector(".splash"));
     assert.ok(host.querySelector(".shell"));
     unmount();
   });
 
   test("with a zero time the app opens straight on the shell", async () => {
     const { host, unmount } = await mount(<App splashMs={0} />);
-    assert.equal(host.querySelector(".splash"), null);
+    absent(host.querySelector(".splash"));
     assert.ok(host.querySelector(".shell"));
     unmount();
   });
@@ -123,7 +124,79 @@ describe("navigation", () => {
     const kids = [...one(host, ".sidebar-top").children].map((c) => c.tagName + "." + c.className);
     assert.deepEqual(kids, ["IMG.app-icon", "INPUT.global-search", "BUTTON.rpc-toggle"]);
     assert.equal(one(host, ".app-icon").getAttribute("src"), "logo.png");
-    assert.equal(one(host, ".global-search").getAttribute("aria-label"), "Global search");
+    assert.equal(one(host, ".global-search").getAttribute("aria-label"), "Search games");
+    assert.equal(one(host, ".global-search").getAttribute("placeholder"), "Search games");
+    unmount();
+  });
+});
+
+describe("the search box", () => {
+  const search = (host: HTMLElement) => one<HTMLInputElement>(host, ".global-search");
+  const shown = (host: HTMLElement) => [...host.querySelectorAll("[aria-label='Your games'] .game-card h3")].map((h) => h.textContent);
+  const withGames = () => {
+    tauri = installTauri((cmd) => (cmd === "list_games" ? [steamGame, gogGame] : null));
+    return tauri;
+  };
+
+  test("typing narrows the games on the page as you type, and clearing brings them all back", async () => {
+    withGames();
+    const { host, unmount } = await mount(<App splashMs={0} />);
+    await settle();
+    assert.deepEqual(shown(host), ["Helldivers 2", "Alpha"]);
+
+    await type(search(host), "alp");
+    assert.deepEqual(shown(host), ["Alpha"]);
+    assert.equal(one(host, "[aria-label=Scan] p[role=status]").textContent, "Showing 1 of 2 games matching “alp”.");
+
+    await type(search(host), "");
+    assert.deepEqual(shown(host), ["Helldivers 2", "Alpha"]);
+    unmount();
+  });
+
+  test("Escape empties the box and shows every game again", async () => {
+    withGames();
+    const { host, unmount } = await mount(<App splashMs={0} />);
+    await settle();
+    await type(search(host), "hell");
+    assert.deepEqual(shown(host), ["Helldivers 2"]);
+
+    await keyOn(search(host), "Escape");
+    assert.equal(search(host).value, "");
+    assert.deepEqual(shown(host), ["Helldivers 2", "Alpha"]);
+    unmount();
+  });
+
+  test("searching from another page goes to the Game Library, where the games are", async () => {
+    withGames();
+    const { host, unmount } = await mount(<App splashMs={0} />);
+    await settle();
+    await click(nav(host, "Settings"));
+    assert.equal(one(host, ".page-header h1").textContent, "Settings");
+
+    await type(search(host), "alpha");
+    await settle();
+    assert.equal(one(host, ".page-header h1").textContent, "Game Library");
+    assert.deepEqual(shown(host), ["Alpha"]);
+    assert.equal(nav(host, "Game Library").getAttribute("aria-current"), "page");
+    unmount();
+  });
+
+  test("a blank search does not move you off the page you are on", async () => {
+    withGames();
+    const { host, unmount } = await mount(<App splashMs={0} />);
+    await settle();
+    await click(nav(host, "Settings"));
+    await type(search(host), "   ");
+    assert.equal(one(host, ".page-header h1").textContent, "Settings");
+    unmount();
+  });
+
+  test("searching is done on the page: the backend is asked for the games once, not per letter", async () => {
+    const t = withGames();
+    const { host, unmount } = await mount(<App splashMs={0} />);
+    await settle();
+    for (const text of ["a", "al", "alp", "alph"]) await type(search(host), text);
+    assert.equal(t.calls.filter((c) => c.cmd === "list_games").length, 1);
     unmount();
   });
 });
@@ -150,7 +223,7 @@ describe("title bar", () => {
     const { host, unmount } = await mount(<TitleBar />);
     assert.equal(one(host, "strong").textContent, "Soups Unified Launcher");
     assert.match(one(host, ".titlebar-note").textContent ?? "", /Early development/);
-    assert.equal(host.querySelector(".wincontrols"), null);
+    absent(host.querySelector(".wincontrols"));
     assert.equal(one(host, "img").getAttribute("width"), "24");
     unmount();
   });

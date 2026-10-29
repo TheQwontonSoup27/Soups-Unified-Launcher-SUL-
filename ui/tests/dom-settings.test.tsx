@@ -1,4 +1,4 @@
-import { click, key, mount, one, resetBrowser, settle, stubFetch, stubObjectUrls, type, withText, act } from "./dom";
+import { absent, click, key, mount, one, resetBrowser, settle, stubFetch, stubImages, stubObjectUrls, type, waitFor, withText, act } from "./dom";
 import assert from "node:assert/strict";
 import { File as NodeFile } from "node:buffer";
 import { afterEach, beforeEach, describe, test } from "node:test";
@@ -18,6 +18,7 @@ let undo: Array<() => void> = [];
 beforeEach(() => {
   resetBrowser();
   undo.push(stubFetch(WALLPAPERS));
+  undo.push(stubImages(() => true)); // every thumbnail is there unless a test says otherwise
 });
 afterEach(() => {
   for (const f of undo.reverse()) f();
@@ -53,13 +54,13 @@ describe("Settings tabs", () => {
     assert.equal(tab(host, "Discord").getAttribute("aria-selected"), "true");
     assert.equal(tab(host, "Appearance").getAttribute("aria-selected"), "false");
     assert.ok(withText(host, "h3", "Discord Rich Presence"));
-    assert.equal(host.querySelector(".theme-grid"), null, "the other pane is gone, not just hidden");
+    absent(host.querySelector(".theme-grid"), "the other pane is gone, not just hidden");
 
     await click(tab(host, "Security & Trust"));
     const pane = one(host, "[role=tabpanel]");
     assert.match(pane.textContent ?? "", /Not investigated/);
     assert.match(pane.textContent ?? "", /Nothing in this module is implemented yet/);
-    assert.equal(pane.querySelector("h1"), null, "embedded: the page header is not repeated");
+    absent(pane.querySelector("h1"), "embedded: the page header is not repeated");
 
     await click(tab(host, "Appearance"));
     assert.ok(withText(host, "h3", "Theme"));
@@ -172,6 +173,24 @@ describe("Appearance: background", () => {
     unmount();
   });
 
+  test("a wallpaper whose picture is missing is left out, not shown as a broken tile", async () => {
+    undo.push(stubImages((url) => url.includes("w01"))); // a fresh clone: the list is there, the pictures are not
+    const { host, unmount } = await settings();
+    const tiles = [...host.querySelectorAll(".wall")];
+    assert.equal(tiles.length, 1);
+    assert.match(tiles[0]!.textContent ?? "", /Dusk shoreline/);
+    unmount();
+  });
+
+  test("when none of the listed pictures are there, the gallery says it is empty instead of showing broken tiles", async () => {
+    undo.push(stubImages(() => false));
+    const { host, unmount } = await settings();
+    assert.equal(host.querySelectorAll(".wall").length, 0);
+    assert.equal(host.querySelectorAll(".wall-grid").length, 0);
+    assert.match(host.textContent ?? "", /No gallery images are installed/);
+    unmount();
+  });
+
   test("picking a gallery image selects the gallery and keeps the choice", async () => {
     const { host, unmount } = await settings();
     await click(withText(host, ".wall", "Dusk shoreline"));
@@ -210,7 +229,12 @@ describe("Appearance: your own picture or video", () => {
     await act(async () => {
       input.dispatchEvent(new window.Event("change", { bubbles: true }));
     });
-    await settle();
+    // Storing the file takes several turns of the fake IndexedDB. The outcome is on the page when either
+    // a reason is shown (refused, or not stored) or the file is selected.
+    await waitFor(
+      () => host.querySelector("p[role=status]") !== null || bgChoice(host, "My file").getAttribute("aria-checked") === "true",
+      "the chosen file to be stored and shown, or refused",
+    );
   }
 
   test("the file picker offers only the supported kinds", async () => {
@@ -241,7 +265,7 @@ describe("Appearance: your own picture or video", () => {
   test("an accepted picture is stored, selected, and can be removed after a confirmation", async () => {
     const { host, unmount } = await settings();
     await choose(host, new NodeFile(["\x89PNG"], "pic.png", { type: "image/png" }));
-    assert.equal(host.querySelector("p[role=status]"), null, "no problem to report");
+    absent(host.querySelector("p[role=status]"), "no problem to report");
     assert.equal(bgChoice(host, "My file").getAttribute("aria-checked"), "true");
     assert.equal(stored("sul.bg").mode, "custom");
     assert.equal((await loadCustomBg())?.name, "pic.png");
@@ -252,12 +276,13 @@ describe("Appearance: your own picture or video", () => {
     assert.equal(dialog.getAttribute("aria-label"), "Remove background file?");
     assert.match(dialog.textContent ?? "", /Your original file is not touched/);
     await click(withText(dialog, "button", "Keep it"));
-    assert.equal(document.body.querySelector("[role=dialog]"), null);
+    absent(document.body.querySelector("[role=dialog]"));
     assert.equal((await loadCustomBg())?.name, "pic.png");
 
     await click(withText(host, "button", "Remove “pic.png”"));
     await click(withText(one(document.body, "[role=dialog]"), "button", "Remove"));
-    assert.equal(document.body.querySelector("[role=dialog]"), null);
+    // The dialog closes only once the stored copy is deleted, which takes several turns of the fake IndexedDB.
+    await waitFor(() => document.body.querySelector("[role=dialog]") === null, "the dialog to close once the file is removed");
     assert.equal(await loadCustomBg(), null);
     assert.equal(bgChoice(host, "Solid colour").getAttribute("aria-checked"), "true");
     assert.equal(bgChoice(host, "My file").disabled, true);
@@ -296,7 +321,7 @@ describe("Dialog", () => {
     const dialog = one(host, "[role=dialog]");
     assert.equal(dialog.getAttribute("aria-modal"), "true");
     assert.equal(dialog.getAttribute("aria-label"), "Sure?");
-    assert.equal(document.activeElement, withText(dialog, "button", "Yes"));
+    assert.ok(document.activeElement === withText(dialog, "button", "Yes"), "the first button of the dialog has the focus");
     unmount();
   });
 

@@ -61,7 +61,7 @@ export function AppearancePanel() {
 
         <h4>Gallery</h4>
         {s.wallpapers.length === 0
-          ? <p className="muted">No gallery images are installed. Place images in <code>ui/public/wallpapers/</code> (see manifest.json).</p>
+          ? <p className="muted">No gallery images are installed. Place images in <code>ui/public/wallpapers/</code> (see the README there).</p>
           : <div className="wall-grid">
               {s.wallpapers.map((w) => (
                 <button key={w.id} className={`wall${s.bg.mode === "gallery" && s.bg.galleryId === w.id ? " selected" : ""}`}

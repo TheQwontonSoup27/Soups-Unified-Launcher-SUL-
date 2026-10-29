@@ -5,6 +5,7 @@
 import "./dom-env";
 import { act, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
+import assert from "node:assert/strict";
 
 export { act };
 
@@ -30,11 +31,36 @@ export async function mount(ui: ReactElement): Promise<Mounted> {
   };
 }
 
+/**
+ * Assert that nothing matched. Do not pass a DOM element to `assert.equal`: when that assertion fails
+ * Node builds the message by printing the element, which in happy-dom is a graph so large that the test
+ * process appears to hang and is then killed for lack of memory, and the real failure is never shown.
+ */
+export function absent(el: Element | null, what = "expected nothing here"): void {
+  if (el !== null) {
+    throw new assert.AssertionError({ message: `${what}, but found <${el.tagName.toLowerCase()}>: ${el.outerHTML.slice(0, 200)}` });
+  }
+}
+
 /** Let pending promises and timers settle (state updates after an awaited call). */
 export async function settle(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+/**
+ * Wait, turn by turn, until `done()` is true, and fail saying `what` was awaited if it takes longer than
+ * `ms`. For work that needs several turns, such as the fake IndexedDB: one `settle()` is not enough for
+ * it every time, so a test that asserts after a single `settle()` passes or fails by luck.
+ */
+export async function waitFor(done: () => boolean, what: string, ms = 3000): Promise<void> {
+  const end = Date.now() + ms;
+  for (;;) {
+    await settle();
+    if (done()) return;
+    if (Date.now() > end) throw new Error(`still waiting after ${ms} ms for ${what}`);
+  }
 }
 
 export async function click(el: Element): Promise<void> {
@@ -64,6 +90,13 @@ export async function submit(form: HTMLFormElement): Promise<void> {
 export async function key(name: string): Promise<void> {
   await act(async () => {
     window.dispatchEvent(new window.KeyboardEvent("keydown", { key: name, bubbles: true }));
+  });
+}
+
+/** A key pressed while `el` has the focus (the event starts at `el` and bubbles up). */
+export async function keyOn(el: Element, name: string): Promise<void> {
+  await act(async () => {
+    el.dispatchEvent(new window.KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
   });
 }
 
@@ -131,6 +164,26 @@ export function stubFetch(body: unknown, ok = true): () => void {
   globalThis.fetch = (async () => ({ ok, json: async () => body })) as unknown as typeof fetch;
   return () => {
     globalThis.fetch = original;
+  };
+}
+
+/**
+ * `new Image()` for tests: happy-dom never loads pictures, so this one answers `onload` when
+ * `loads(url)` is true and `onerror` otherwise, as soon as `src` is set (in a microtask, so a
+ * `settle()` is enough). Returns the undo.
+ */
+export function stubImages(loads: (url: string) => boolean): () => void {
+  const original = globalThis.Image;
+  class FakeImage {
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(url: string) {
+      queueMicrotask(() => (loads(url) ? this.onload : this.onerror)?.());
+    }
+  }
+  globalThis.Image = FakeImage as unknown as typeof Image;
+  return () => {
+    globalThis.Image = original;
   };
 }
 
