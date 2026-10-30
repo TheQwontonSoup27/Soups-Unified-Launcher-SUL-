@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-29 (Section 1 defects fixed, Windows-only cleanup, flaky tests fixed; on branch `fix/section1-defects-windows-only`, not yet merged)
+**Last updated:** 2026-10-29 (Section 1 defects fixed, Windows-only cleanup, flaky tests fixed, Section 2 decisions recorded; on branch `fix/section1-defects-windows-only`, not yet merged)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -13,7 +13,11 @@
   Discord transport, the Unix symlink test and the Android test branch were removed. What remains are small `#[cfg(not(windows))]`
   stubs that only refuse ("needs Windows") so that the Rust code still compiles off Windows (this is how it is checked in the Linux
   container); they hold no Linux behaviour. They can be deleted if the workspace should stop compiling anywhere but Windows.
-- Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
+- Section 2 (`docs/decisions/0004-section-2-decisions-from-the-wireframe-review.md`, wireframes in `docs/section-2-wireframes.md`; **nothing built**):
+  the Discord rule gets one exception, a webhook destination for the Media & Clipping Engine's "Automated Social/Discord Webhooks" toggle
+  (opt-in, off by default, URL treated as a secret); RAM figures are goals, not limits; the Companion Editor Handshake is a placeholder (Not investigated),
+  and Minimal mode's auto-transfer does not depend on it; defaults: Compact density, inline "Details →", keep the Discord RPC tab, Playtime Tracker stays a placeholder.
+- Still open: where a Discord webhook URL is stored (recommended: Windows Credential Manager), the go-ahead to build Section 2 and its first slice, licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
   Steam Web API key would live (it is a secret).
 
 ## What exists
@@ -166,6 +170,8 @@ Left in place on purpose: the Windows Store icon sizes in `src-tauri/icons/` (st
 `design-references/` at the repo root, which does not exist; the path in those two files is the mismatch, not the images).
 
 ## Next action
+0. Owner decisions waiting: (a) merge `fix/section1-defects-windows-only` into `main`; (b) go-ahead to build Section 2, starting with the smallest slice
+   (Display density setting and the inline Details inspector, no live data); (c) where the webhook URL is stored, needed only before the webhook toggle is built.
 1. On Windows: `git checkout main`, `git pull`, `npm install`, `cargo test --workspace` (it runs more tests than the Linux container, because
    `tests/windows_system.rs` only runs on Windows), `npm run dev`; press "Scan for games", open a card's Compatibility, tick a box, and press
    Play on a Steam game; report what you see.
