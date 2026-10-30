@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-30 (Section 1 fixes merged into `main` at abf8d45; Section 2 slice 1, display density, built on branch `feature/section-2-density-and-redactor`, not yet merged)
+**Last updated:** 2026-10-30 (Section 2 slice 1, display density, merged into `main` at 6902aeb; slice 2, the read-only Security & Trust pane, built on branch `feature/section-2-security-trust-pane`, not yet merged)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -32,15 +32,41 @@ recorded, Steam-library guard); `SteamManager` (thread-safe launch by `steam://r
 `steam` feature); `LibraryService` (scan, list, matrix, tick: the rules behind the UI).
 `src-tauri`: Tauri container, least-privilege capabilities, commands `app_info`, `discord_set_enabled`, `list_games`,
 `scan_games_command`, `get_game_matrix`, `update_feature_tick`, `launch_game_command` (`src-tauri/src/commands.rs`).
-`ui` (branch `feature/section-2-density-and-redactor`, not on `main` yet): a Display density card in Settings > Appearance (global Compact/Detailed, default Compact; lists and clears
+`ui` (Section 2 slices, on `main` since 6902aeb unless stated): a Display density card in Settings > Appearance (global Compact/Detailed, default Compact; lists and clears
 overrides) and a Performance Overview on Diagnostics & Performance with a per-module strip (Inherit Global / Always Compact / Always Detailed) and an inline "Details →" panel.
 Placeholders only: no figure is shown anywhere, the panel says the sampler is not built. Log redactor: also masks Discord webhook URLs in any text (`sul-core::logging::redact_text`).
+`ui` (slice 2, branch `feature/section-2-security-trust-pane`, not on `main` yet): Settings > Security & Trust is a read-only report instead of a placeholder: a headline that is the weakest label on the page
+(Not investigated), two design rules (Credentials, Data sharing) each saying how they were checked and what was not, what could send data off this PC (Discord Rich Presence, Experimental, with whether it is on right now;
+the webhook toggle, Not investigated, not built), and three protections (package scanning, quarantine, integrity checks) that are not built. No controls. A tripwire test fails if network code is added to SUL's own source.
 `ui` (on `main`): Vite + React shell with the Step 1 sidebar (Game Library first; Settings and General Playtime Tracker last), the ten
 roadmap modules as labelled placeholders, Team27 theme with contrast-checked token editor, backgrounds, borderless title bar,
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
 
-## Verified 2026-10-30 (branch `feature/section-2-density-and-redactor`, commit 4ce3299, on top of `main` abf8d45)
+## Verified 2026-10-30 (branch `feature/section-2-security-trust-pane`, commit d9ec2ec, on top of `main` 6902aeb)
+Linux container, Node 22.23, cargo 1.97. Exact commands and results:
+- Rust: not changed in this slice. On the merged `main` 6902aeb (before this branch) `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
+  `cargo clippy -p sul-core -p sul-tauri --all-targets --features steam -- -D warnings` were clean, and `cargo test --workspace` → 221 passed, 0 failed.
+- `npm run typecheck` (in `ui`) → clean. `npm test` → 258 tests, 258 passed, 0 failed (30 new: 19 pure in `tests/security.test.ts` and `tests/no-network.test.ts`, 11 clicked-through in
+  `tests/dom-security.test.tsx`; one existing Settings test was updated because the placeholder text is gone). `npm run build` → built. `npm audit` → 0 vulnerabilities.
+- Mutation checks: 15 deliberate breaks, each caught by a failing test: Rich Presence labelled Supported and tested; its limit removed; the headline taking the first row instead of the weakest;
+  quarantine claiming to work; integrity checks merging suspicious with confirmed; the data-sharing text dropping what was not checked; the credentials text promising safety; the "right now" fact stuck on off; the
+  rule tag removed; a button added to the read-only page; the tab not showing the panel; and four network tripwires (`std::net` added to `sul-core`, `reqwest` declared in `Cargo.toml`, a second `fetch` in the window code,
+  an address written in a comment).
+- Stress: `tests/dom-security.test.tsx` and `tests/dom-settings.test.tsx` together, 15 of 15 runs passed.
+- Real browser (headless Chromium, built `ui/dist`, no Tauri window): at 320, 420, 700 and 1100 px wide no page error, no horizontal scroll, all four cards inside the content column, six labels (one headline, five rows) matching the
+  tests, no button, field or link in the panel; "Right now" read off, then on after the sidebar presence switch was clicked; no request was made to any other origin during the run. The script is ad hoc and not in the repo.
+- Claims the page makes and how each was checked (this was done by reading, 2026-10-30): the settings the window keeps (searched the window code for storage use); no network API in SUL's own Rust code and no HTTP client declared (searched; `cargo tree`
+  shows the Tauri framework itself brings in `reqwest`/`hyper`, which is why the page says "SUL's own" code and names the unchecked part); the window's only request is for the wallpaper list file the app ships.
+  **Not done:** network traffic was never captured; what the Tauri framework does with its HTTP client was not audited; nothing was run inside the real Tauri window; no screen reader was used.
+
+## Verified in GitHub Actions: Section 2 slice 2 (windows-latest)
+- Branch `feature/section-2-security-trust-pane`, commit d9ec2ec, run 41025191144: `core`, `ui`, `tauri-shell` all succeeded (step results only). The commit after it only changes documentation.
+
+## Verified in GitHub Actions: merge of slice 1 into `main` (windows-latest)
+- `main` 6902aeb, run 41024434409: `core`, `ui`, `tauri-shell` all succeeded (step results only). Local re-test of the merged `main` before pushing: 221 Rust tests and 228 UI tests passed.
+
+## Verified 2026-10-30 (branch `feature/section-2-density-and-redactor`, commit 4ce3299, on top of `main` abf8d45; merged into `main` as 6902aeb)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core -p sul-tauri --all-targets --features steam -- -D warnings` → clean.
 - `cargo test --workspace` → 221 passed, 0 failed: 162 `sul-core` unit tests (12 new, for the redactor), 16 in `tests/core.rs` (1 new: the log file never holds a webhook URL),
