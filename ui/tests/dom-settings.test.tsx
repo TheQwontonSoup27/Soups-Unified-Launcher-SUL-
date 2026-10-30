@@ -59,7 +59,8 @@ describe("Settings tabs", () => {
     await click(tab(host, "Security & Trust"));
     const pane = one(host, "[role=tabpanel]");
     assert.match(pane.textContent ?? "", /Not investigated/);
-    assert.match(pane.textContent ?? "", /Nothing in this module is implemented yet/);
+    assert.match(pane.textContent ?? "", /This page only reports\./);
+    assert.ok(withText(pane, "h3", "Credentials"));
     absent(pane.querySelector("h1"), "embedded: the page header is not repeated");
 
     await click(tab(host, "Appearance"));

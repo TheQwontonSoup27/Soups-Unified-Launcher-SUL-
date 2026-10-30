@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { AppearancePanel } from "../modules/appearance";
-import { renderModule } from "../modules/registry";
 import { DiscordPanel } from "./DiscordPanel";
+import { SecurityPanel } from "./SecurityPanel";
 
 type Pane = "appearance" | "discord" | "security";
 
@@ -27,7 +27,7 @@ export default function SettingsView() {
       <div className="pane" role="tabpanel">
         {pane === "appearance" && <AppearancePanel />}
         {pane === "discord" && <DiscordPanel />}
-        {pane === "security" && renderModule("security", true)}
+        {pane === "security" && <SecurityPanel />}
       </div>
     </>
   );

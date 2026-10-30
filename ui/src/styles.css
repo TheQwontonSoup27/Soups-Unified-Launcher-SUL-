@@ -124,3 +124,8 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .telemetry thead th { font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
 .overrides { margin:6px 0 10px; padding-left:20px; }
 @media (max-width:520px){ .telemetry th, .telemetry td { padding:6px 4px; } .telemetry thead th { font-size:11px; letter-spacing:.02em; } }
+/* Security & Trust: a read-only report. Existing tokens only. */
+.trust-list { list-style:none; margin:8px 0; padding:0; }
+.trust-list li { padding:10px 0; border-bottom:1px solid var(--border); } .trust-list li:last-child { border-bottom:0; }
+.trust-list li p { margin:6px 0 0; } .trust-title { font-weight:700; }
+
