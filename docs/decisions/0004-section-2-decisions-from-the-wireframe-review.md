@@ -1,6 +1,8 @@
 # 0004 — Section 2: owner's answers to the wireframe review
-Date: 2026-10-29 · Status: accepted by owner (answers to the five questions asked after the Section 2 wireframes). **Nothing in Section 2 is built.**
-Build starts only when the owner says so. The wireframes, with these answers applied, are saved in `docs/section-2-wireframes.md`.
+Date: 2026-10-29 · Status: accepted by owner (answers to the five questions asked after the Section 2 wireframes).
+**Update 2026-10-29 (owner):** go-ahead to build Section 2, first slice only: the Display density setting, per-module overrides and the inline Details panel with
+placeholders and no live data. Webhook URL storage decided (below). Built on branch `feature/section-2-density-and-redactor`; see `PROJECT_STATUS.md`.
+Nothing else in Section 2 is built. The wireframes, with these answers applied, are saved in `docs/section-2-wireframes.md`.
 
 ## The owner's answers and what they mean
 1. **Discord webhook: "make an exception."** The Discord rule (Rich Presence only; no chat overlay, friends list, login or webhook UI) is relaxed
@@ -8,11 +10,13 @@ Build starts only when the owner says so. The wireframes, with these answers app
    - Scope applied (an interpretation, easy to widen): **only** that destination field. The rest of the rule stands: no chat overlay, no friends list, no login.
    - Rules already in force that now bind this feature (`CLAUDE.md`): off by default and opt-in; uploads minimal; no secrets in source control or plaintext logs.
      A webhook URL is a secret (anyone holding it can post to that channel), so it is not kept in the settings JSON, not logged, and shown masked.
-   - **Prerequisite found in the code:** the log redactor (`crates/sul-core/src/logging.rs`) masks by field name only (`password`, `passwd`, `token`,
-     `secret`, `authorization`, `api_key`, `apikey`, `cookie`, `session`). A webhook URL under `webhook_url` or `url` would be written in clear.
-     Before the feature ships: add `webhook` to that list and also mask any value that looks like `discord.com/api/webhooks/…`, with tests.
-   - **Not decided (owner to choose):** where the URL is stored. Recommended: Windows Credential Manager (per user, encrypted by Windows),
-     which needs one new dependency (`keyring` or the `windows` crate). Alternative: a file under the data folder encrypted with Windows DPAPI.
+   - **Prerequisite found in the code, now done (commit 7b4c812):** the log redactor (`crates/sul-core/src/logging.rs`) masked by field name only, so a webhook URL
+     under `webhook_url` or `url` would have been written in clear. It now also treats `webhook` as a secret field name, and masks any Discord webhook URL
+     inside any text value at any depth, and in the event name (`discord.com`, `discordapp.com`, `ptb.`/`canary.` hosts, any API version, a percent-encoded
+     address inside another address). `redact_text` is public so that text from an HTTP error, which usually quotes the address, can be cleaned before it is
+     shown. 12 unit tests and one end-to-end test that reads the log file back. It must be in place before the webhook toggle is built, and it is.
+   - **Decided (owner, 2026-10-29): the URL is stored in Windows Credential Manager** (per user, encrypted by Windows). That needs one new dependency
+     (`keyring` or the `windows` crate), to be chosen and justified when the webhook toggle is built. Not built yet. The URL never goes in the settings JSON.
    - What is posted, and when, is **not designed**. The row stays Not investigated.
 2. **RAM: "we will try our best to minimize the factor ... I do not mind the process taking up more than intended as long as it is as efficient as it can ever be."**
    The figures in the wireframes (Minimal under 50 MB, Full Feature Mode about 90–140 MB) are **goals, not limits**. No feature is disabled or refused
@@ -25,7 +29,7 @@ Build starts only when the owner says so. The wireframes, with these answers app
 4. **Defaults:** layout density Compact across the launcher modules; "Details →" opens the inspector inline, not in a separate window; the lightweight
    Discord Rich Presence tab/toggle stays; the General Playtime Tracker stays an explicit placeholder.
 5. **Section 1 fixes before Section 2 code: approved; "wire it" for the search box.** Done on branch `fix/section1-defects-windows-only`
-   (tab strip, wallpaper gallery, search narrowing the Game Library); see `PROJECT_STATUS.md`. Not yet merged into `main`.
+   (tab strip, wallpaper gallery, search narrowing the Game Library); see `PROJECT_STATUS.md`. Merged into `main` (abf8d45) on the owner's go-ahead; Windows CI on that merge passed.
 
 ## Wireframe changes these answers cause (the Media & Clipping Engine pane)
 ```
@@ -51,9 +55,17 @@ qualification. It now says nothing leaves this PC by default, and that the one s
 (off until ticked and given a destination). The exception must not make that pane overclaim.
 Everything else in the wireframes is unchanged. The sample figures in the pane (such as "+6.2 MB") are illustrations, not measurements.
 
-## Still open before Section 2 code
-- Where the webhook URL is stored (see 1).
-- Go-ahead to build, and the first slice. Suggested order, smallest first: (1) the Display density setting (global Compact/Detailed plus the per-module
-  override) and the inline Details inspector with no live data; (2) the read-only Security & Trust pane; (3) the Media & Clipping Engine pane as a shell
-  with every feature Not investigated; (4) the Rust telemetry sampler (CPU and threads are measurable; per-subsystem RAM, frame-time variance and per-process
-  interrupts are not, and stay Not investigated).
+## Order of the slices, and where they stand
+(1) The Display density setting (global Compact/Detailed plus the per-module override) and the inline Details inspector with no live data: **built on the
+feature branch, awaiting the owner's go-ahead to merge** (the first merge into `main` was not requested). (2) The read-only Security & Trust pane. (3) The Media &
+Clipping Engine pane as a shell with every feature Not investigated. (4) The Rust telemetry sampler (CPU and threads are measurable; per-subsystem RAM, frame-time
+variance and per-process interrupts are not, and stay Not investigated). (5) The webhook toggle with Credential Manager storage, last and only on its own go-ahead.
+Slices 2 to 5 are not started; each needs the owner's go-ahead.
+
+## Choices made while building slice 1 (easy to change)
+- The Performance Overview is on the Diagnostics & Performance page, as drawn. Its one section is the Media & Clipping Engine, whose stored id is `clipping-engine`.
+  It is not the Capture & Clips page (the clip library), which the wireframe keeps separate.
+- Settings has no Media & Clipping tab yet, so for now the module's own strip is only on the Performance Overview; the Settings card edits the global view
+  and lists and clears overrides. Both edit one stored value (`sul.density` in the browser's local storage).
+- Compact shows "Engine total · RAM — | CPU —" and nothing else: dashes, never sample figures. The Details panel has the rows of the finished one, every figure a
+  dash, and says in words that the sampler is not built.

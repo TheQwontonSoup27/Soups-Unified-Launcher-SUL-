@@ -102,6 +102,8 @@ Settings  (.page-header)
 ```
 
 #### 4a. Appearance (existing cards unchanged, one new card)
+BUILT 2026-10-30 on branch `feature/section-2-density-and-redactor` (not merged): the card, the per-module strip and the inline Details panel. Differences from the drawing: nothing is measured yet,
+so the compact line reads `Engine total · RAM — | CPU —` instead of sample figures, and the card says what the settings mean; the per-module strip is on the Performance Overview (there is no Media & Clipping tab yet).
 
 ```
 +- Theme ................ (unchanged)
