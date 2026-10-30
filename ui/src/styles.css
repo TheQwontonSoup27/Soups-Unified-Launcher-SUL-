@@ -114,3 +114,13 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .pane { margin-top:18px; }
 .card input[type=text] { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; min-width:240px; }
 .primary:disabled { opacity:.5; cursor:not-allowed; }
+/* Display density and the measurement panels. Colours come from the existing tokens only. */
+.density-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:8px 0; }
+.seg.wrap { flex-wrap:wrap; }
+.perf-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:8px 0; }
+.telemetry-panel { margin-top:8px; border-top:1px solid var(--border); padding-top:8px; } .telemetry-panel h4 { margin:6px 0; }
+.telemetry { width:100%; border-collapse:collapse; margin:8px 0; }
+.telemetry th, .telemetry td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
+.telemetry thead th { font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+.overrides { margin:6px 0 10px; padding-left:20px; }
+@media (max-width:520px){ .telemetry th, .telemetry td { padding:6px 4px; } .telemetry thead th { font-size:11px; letter-spacing:.02em; } }

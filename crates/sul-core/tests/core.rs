@@ -254,6 +254,38 @@ fn logger_redacts_secrets_on_disk() {
     assert_eq!(redact(&json!({"api_key": 1}))["api_key"], "[REDACTED]");
 }
 
+/// The whole path to the disk, not just the function: a webhook URL put in a field of its own, in a message, in an
+/// error string or in a nested value must not be in the file afterwards.
+#[test]
+fn logger_never_writes_a_discord_webhook_url_to_disk() {
+    let d = tempfile::tempdir().unwrap();
+    let path = d.path().join("logs/sul.jsonl");
+    let log = Logger::open(&path).unwrap();
+    let id = "987654321098765432";
+    let token = "Zz9_Yy8-Xx7WwVvUuTtSsRrQqPpOoNnMmLlKkJjIiHhGgFfEeDdCcBbAa0123456789abcdefghij";
+    let url = format!("https://discord.com/api/webhooks/{id}/{token}");
+    log.log(
+        "error",
+        "webhook post failed",
+        json!({
+            "webhook_url": url,
+            "error": format!("error sending request for url ({url}): connection refused"),
+            "details": {"attempts": [format!("POST {url}")], "status": 0},
+            "channel": "clips",
+        }),
+    )
+    .unwrap();
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(!text.contains(id) && !text.contains(token), "{text}");
+    assert!(
+        text.contains("error sending request for url ([REDACTED]): connection refused"),
+        "the words around the address are kept: {text}"
+    );
+    assert!(text.contains("clips") && text.contains("connection refused"));
+    let line: serde_json::Value = serde_json::from_str(text.trim()).unwrap();
+    assert_eq!(line["fields"]["webhook_url"], "[REDACTED]");
+}
+
 #[test]
 fn hash_file_matches_the_published_sha256_vectors() {
     use sul_core::manifest::hash_file;

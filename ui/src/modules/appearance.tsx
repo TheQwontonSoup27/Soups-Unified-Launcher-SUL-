@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { DensityCard } from "../components/DensityCard";
 import { Dialog } from "../components/Dialog";
 import { ACCEPTED } from "../background";
 import { useSettings } from "../settings";
@@ -87,6 +88,8 @@ export function AppearancePanel() {
           <span>{Math.round(s.bg.overlay * 100)}%</span>
         </label>
       </section>
+
+      <DensityCard />
 
       {confirm && (
         <Dialog title="Remove background file?" onClose={() => setConfirm(false)}

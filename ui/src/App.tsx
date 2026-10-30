@@ -4,10 +4,12 @@ import { Splash } from "./components/Splash";
 import Sidebar from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { getAppInfo, type AppInfo } from "./lib/backend";
+import { DensityProvider } from "./densityContext";
 import { renderModule } from "./modules/registry";
 import type { ViewId } from "./nav";
 import { PresenceProvider } from "./presence";
 import { SettingsProvider } from "./settings";
+import DiagnosticsView from "./views/DiagnosticsView";
 import GameLibrary from "./views/GameLibrary";
 import PlaytimeTracker from "./views/PlaytimeTracker";
 import SettingsView from "./views/SettingsView";
@@ -16,6 +18,7 @@ function renderView(view: ViewId, query: string) {
   if (view === "library") return <GameLibrary query={query} />;
   if (view === "settings") return <SettingsView />;
   if (view === "playtime") return <PlaytimeTracker />;
+  if (view === "module:diagnostics") return <DiagnosticsView />;
   return renderModule(view.slice("module:".length));
 }
 
@@ -59,9 +62,11 @@ function Shell({ splashMs }: { splashMs: number }) {
 export function App({ splashMs = 1800 }: { splashMs?: number }) {
   return (
     <SettingsProvider>
-      <PresenceProvider>
-        <Shell splashMs={splashMs} />
-      </PresenceProvider>
+      <DensityProvider>
+        <PresenceProvider>
+          <Shell splashMs={splashMs} />
+        </PresenceProvider>
+      </DensityProvider>
     </SettingsProvider>
   );
 }
