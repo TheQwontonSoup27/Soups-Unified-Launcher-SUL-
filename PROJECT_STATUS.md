@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-28 (tests for the code that had none, merged into `main` at a19a4ba)
+**Last updated:** 2026-10-29 (Section 1 defects fixed, Windows-only cleanup, flaky tests fixed, Section 2 decisions recorded; on branch `fix/section1-defects-windows-only`, not yet merged)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -9,7 +9,15 @@
   Discord small-image asset key is supported, a scale slider is not offered.
 - Steam (`docs/decisions/0003-steam-attach-launch-and-library-ipc.md`): no credentials are stored, ever; `steamworks` only attaches to the
   running client and only on request; games start with `steam://run/<id>`; public player metrics will come from public HTTP by SteamID64.
-- Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
+- Windows only (owner, 2026-10-29): SUL runs on Windows only. Nothing dedicated to another OS is kept: the macOS icon, the Unix-socket
+  Discord transport, the Unix symlink test and the Android test branch were removed. What remains are small `#[cfg(not(windows))]`
+  stubs that only refuse ("needs Windows") so that the Rust code still compiles off Windows (this is how it is checked in the Linux
+  container); they hold no Linux behaviour. They can be deleted if the workspace should stop compiling anywhere but Windows.
+- Section 2 (`docs/decisions/0004-section-2-decisions-from-the-wireframe-review.md`, wireframes in `docs/section-2-wireframes.md`; **nothing built**):
+  the Discord rule gets one exception, a webhook destination for the Media & Clipping Engine's "Automated Social/Discord Webhooks" toggle
+  (opt-in, off by default, URL treated as a secret); RAM figures are goals, not limits; the Companion Editor Handshake is a placeholder (Not investigated),
+  and Minimal mode's auto-transfer does not depend on it; defaults: Compact density, inline "Details →", keep the Discord RPC tab, Playtime Tracker stays a placeholder.
+- Still open: where a Discord webhook URL is stored (recommended: Windows Credential Manager), the go-ahead to build Section 2 and its first slice, licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
   Steam Web API key would live (it is a secret).
 
 ## What exists
@@ -26,6 +34,38 @@ recorded, Steam-library guard); `SteamManager` (thread-safe launch by `steam://r
 roadmap modules as labelled placeholders, Team27 theme with contrast-checked token editor, backgrounds, borderless title bar,
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
+
+## Verified 2026-10-29 (branch `fix/section1-defects-windows-only`, commit 7b92933)
+Linux container, Node 22, cargo 1.97. Exact commands and results:
+- `cargo fmt --all --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core --features steam
+  --all-targets -- -D warnings` → clean.
+- `cargo test --workspace` → 208 passed, 0 failed: 150 `sul-core` unit tests, 15 in `tests/core.rs`, 17 in `tests/discord.rs`, 6 in `tests/steam.rs`,
+  20 in `sul-tauri`. (`tests/core.rs` lost its Unix symlink test and gained a Windows junction test, so its count here is one lower and the
+  Windows run has one more; `tests/windows_system.rs` and the junction test run only on Windows.)
+- `npm run ui:typecheck` → clean. `npm test --workspace ui` → 190 tests, 190 passed, 0 failed, 0 todo. `npm run ui:build` → built. `npm audit` → 0 vulnerabilities.
+- Real browser (headless Chromium, the built `ui/dist`, a server that answers a missing file with the app's own page and status 200 as the packaged app
+  does, a mock Tauri backend with two games): 14 of 14 checks passed. The script is an ad-hoc file, not in the repo. It measured the tab strip
+  in a 500 px high window: 2 px high with the old rule, 41 px with the fix; with all 19 wallpapers listed and no pictures, 0 tiles and 0 broken
+  images; with 2 pictures present, exactly 2 tiles; search narrowing, clearing, Escape and jumping to the Game Library from Settings.
+- The new tests were mutation-checked: 8 deliberate breaks of the fixes (filter logic, gallery filter, page jump, Escape, match count) were each caught
+  by a failing test; the CSS rule has a text guard test only (its effect is what the browser check measured).
+- GitHub Actions, windows-latest, run 40954835437 on 7b92933: `core`, `ui`, `tauri-shell` all succeeded (step results only; per-test output
+  cannot be downloaded). First Windows run of the junction test and of the Discord transport test. The run before it (40909116597, 6d22edb)
+  failed: `NOT_WINDOWS` in `discord.rs` was dead code on Windows (`-D warnings`), which Linux cannot see; fixed in 7b92933.
+
+### Defects fixed in this branch
+- Settings tab strip collapsed to 2 px in a short window (a column flex item with `overflow` set may shrink to nothing). Nothing in the content
+  column shrinks now (`ui/src/styles.css`).
+- Wallpaper gallery showed 19 broken tiles on a fresh clone (manifest committed, pictures git-ignored). It now lists only wallpapers whose thumbnail
+  loads, and says where to put pictures when there are none. The thumbnail is loaded as an image rather than fetched, because the dev server and
+  the packaged app answer a missing file with status 200.
+- The sidebar search box did nothing. It now narrows the Game Library by name, publisher and where the game was found (every word must match);
+  typing on another page jumps to the Game Library; Escape clears it. Chosen scope: games only; no other search targets exist yet.
+- Flaky tests, present on `main` since the previous merge: the settings DOM tests failed about 1 run in 8 (stress run on `main`: 1 of 20; on
+  the branch before the fix: 3 of 20). Tests asserted after one timer tick while the fake IndexedDB needs several turns, and the removal dialog closes only
+  after the delete finishes. A failing assertion that held a DOM element made Node try to print the element, so the process ran out of memory
+  and looked hung. Added `waitFor` and `absent` helpers, converted 27 such assertions, tested the helpers. After: settings file 60 of 60 runs,
+  other DOM files 25 of 25 each, full UI suite 12 of 12.
 
 ## Verified 2026-10-28 (merged `main`, commit a19a4ba)
 Linux container, Node 22, cargo 1.97. Exact commands and results:
@@ -57,11 +97,9 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
 - When a cargo step fails, `.github/scripts/surface-failure.ps1` puts the cause in a run annotation (readable with
   `gh api repos/<owner>/<repo>/check-runs/<job id>/annotations`).
 
-## Known defects found while testing (not fixed; no `ui/src` code was changed in this session)
-- Wallpaper gallery: `ui/public/wallpapers/manifest.json` lists 19 wallpapers but the images are git-ignored (licences unconfirmed), so a fresh
-  clone shows 19 broken tiles. (This file used to say the gallery would be empty; that was wrong.) Kept visible as a `todo` test in
-  `ui/tests/assets.test.ts`.
-- The sidebar search box has no handler: typing in it does nothing.
+## Known defects
+- None open from the 2026-10-28 list: the wallpaper gallery, the search box and the collapsed tab strip are fixed on the branch above (not yet on `main`).
+  Still true on `main` until the branch is merged.
 
 ## Earlier: verified 2026-10-27 (branch `feature/steam-ipc-library`, before the new tests)
 Linux container, Node 22, cargo 1.97. Exact commands and results:
@@ -107,7 +145,7 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
 - Discord against a live Discord client; any of this against a real game install beyond the owner's scan; no game adapter exists.
 - Helldivers 2 7.1.1 isolation/offline launch: Not investigated.
 - Icons are the Team27 set, not reviewed as final branding. Wallpaper JPEGs are git-ignored (licences unconfirmed; docs in
-  `ui/public/wallpapers/README.md`), so the gallery shows 19 broken tiles on a fresh clone (see the known defects above).
+  `ui/public/wallpapers/README.md`), so a fresh clone has an empty gallery that says where to put pictures (19 are listed, none installed).
 - `SystemOpener` (the real `cmd /C start steam://run/<id>`) is deliberately not run in CI: it would open a URL on the runner. The IPC tests
   use a fake opener.
 - The Windows adapters have run only on a GitHub runner (no games, no Steam), never on the owner's machine in this session.
@@ -132,6 +170,8 @@ Left in place on purpose: the Windows Store icon sizes in `src-tauri/icons/` (st
 `design-references/` at the repo root, which does not exist; the path in those two files is the mismatch, not the images).
 
 ## Next action
+0. Owner decisions waiting: (a) merge `fix/section1-defects-windows-only` into `main`; (b) go-ahead to build Section 2, starting with the smallest slice
+   (Display density setting and the inline Details inspector, no live data); (c) where the webhook URL is stored, needed only before the webhook toggle is built.
 1. On Windows: `git checkout main`, `git pull`, `npm install`, `cargo test --workspace` (it runs more tests than the Linux container, because
    `tests/windows_system.rs` only runs on Windows), `npm run dev`; press "Scan for games", open a card's Compatibility, tick a box, and press
    Play on a Steam game; report what you see.

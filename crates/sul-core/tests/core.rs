@@ -61,13 +61,31 @@ fn join_within_stays_in_root() {
     assert!(join_within(d.path(), "../escape").is_err());
 }
 
-#[cfg(unix)]
+/// A junction is a folder link Windows lets anyone create (a symlink needs a privilege). One inside the
+/// root that points outside it must not be followed out.
+#[cfg(windows)]
 #[test]
-fn join_within_rejects_symlink_escape() {
+fn join_within_rejects_junction_escape() {
+    use std::os::windows::process::CommandExt;
     let root = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();
-    std::os::unix::fs::symlink(outside.path(), root.path().join("link")).unwrap();
+    let link = root.path().join("link");
+    let made = std::process::Command::new("cmd")
+        .raw_arg(format!(
+            r#"/C mklink /J "{}" "{}""#,
+            link.display(),
+            outside.path().display()
+        ))
+        .output()
+        .unwrap();
+    assert!(
+        made.status.success(),
+        "mklink failed: {}",
+        String::from_utf8_lossy(&made.stdout)
+    );
     assert!(join_within(root.path(), "link/file.txt").is_err());
+    assert!(join_within(root.path(), "link").is_err());
+    assert!(join_within(root.path(), "plain/file.txt").is_ok());
 }
 
 // ---- capability ----

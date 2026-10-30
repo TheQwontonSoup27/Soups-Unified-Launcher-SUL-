@@ -4,6 +4,7 @@ import {
   COMPAT_LABEL,
   LibraryController,
   describeScan,
+  filterGames,
   messageOf,
   pendingKey,
   playBlockedReason,
@@ -340,4 +341,44 @@ test("every compatibility verdict has a plain label", () => {
     incompatible: "Incompatible",
     not_applicable: "Not applicable",
   });
+});
+
+// --- searching the games ---------------------------------------------------
+
+const driveGame: GameView = { ...gogGame, id: "drive-1", name: "Beta Quest", publisher: null, source: "drive_scan" };
+const GAMES = [steamGame, gogGame, driveGame];
+const names = (games: GameView[]) => games.map((g) => g.name);
+
+test("an empty or blank search keeps every game, in order", () => {
+  assert.deepEqual(names(filterGames(GAMES, "")), ["Helldivers 2", "Alpha", "Beta Quest"]);
+  assert.deepEqual(names(filterGames(GAMES, "   \t ")), ["Helldivers 2", "Alpha", "Beta Quest"]);
+});
+
+test("a search matches the name in any case, anywhere in it", () => {
+  assert.deepEqual(names(filterGames(GAMES, "hell")), ["Helldivers 2"]);
+  assert.deepEqual(names(filterGames(GAMES, "DIVERS")), ["Helldivers 2"]);
+  assert.deepEqual(names(filterGames(GAMES, "quest")), ["Beta Quest"]);
+  assert.deepEqual(names(filterGames(GAMES, "zzz")), []);
+});
+
+test("a search also matches the publisher and where the game was found", () => {
+  assert.deepEqual(names(filterGames(GAMES, "studio")), ["Alpha"]);
+  assert.deepEqual(names(filterGames(GAMES, "steam")), ["Helldivers 2"]);
+  assert.deepEqual(names(filterGames(GAMES, "gog")), ["Alpha"]);
+  assert.deepEqual(names(filterGames(GAMES, "on a drive")), ["Beta Quest"]);
+});
+
+test("every word must match, in any order, and extra spaces do not matter", () => {
+  assert.deepEqual(names(filterGames(GAMES, "2 divers")), ["Helldivers 2"]);
+  assert.deepEqual(names(filterGames(GAMES, "  divers   hell ")), ["Helldivers 2"]);
+  assert.deepEqual(names(filterGames(GAMES, "studio alpha")), ["Alpha"]);
+  assert.deepEqual(names(filterGames(GAMES, "alpha steam")), [], "one word that matches nothing rules the game out");
+});
+
+test("the install folder is not searched, and the list given is not changed", () => {
+  // Helldivers 2 lives in D:\\SteamLibrary\\...; a folder name is not what the user means by a game.
+  assert.deepEqual(filterGames(GAMES, "steamlibrary"), []);
+  const before = [...GAMES];
+  filterGames(GAMES, "alpha");
+  assert.deepEqual(GAMES, before);
 });

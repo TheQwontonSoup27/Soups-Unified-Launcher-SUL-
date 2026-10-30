@@ -1,4 +1,4 @@
-import { click, installTauri, mount, one, resetBrowser, settle, submit, type, withText } from "./dom";
+import { absent, click, installTauri, mount, one, resetBrowser, settle, submit, type, withText } from "./dom";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import { PresenceMessage, PresenceToggle } from "../src/components/PresenceToggle";
@@ -37,7 +37,7 @@ describe("Discord presence, in a plain browser (no desktop app)", () => {
     assert.ok(!sidebarSwitch(host).classList.contains("on"));
     assert.equal(panelSwitch(host).textContent, "Turn presence on");
     assert.equal(localStorage.getItem(WANTED), null, "opt-in: nothing is saved until the user chooses");
-    assert.equal(host.querySelector(".presence-msg"), null);
+    absent(host.querySelector(".presence-msg"));
     unmount();
   });
 
@@ -53,7 +53,7 @@ describe("Discord presence, in a plain browser (no desktop app)", () => {
 
     await click(panelSwitch(host));
     assert.equal(sidebarSwitch(host).getAttribute("aria-checked"), "false");
-    assert.equal(host.querySelector(".presence-msg"), null, "turning it off clears the message");
+    absent(host.querySelector(".presence-msg"), "turning it off clears the message");
     assert.equal(localStorage.getItem(WANTED), "0");
     unmount();
   });

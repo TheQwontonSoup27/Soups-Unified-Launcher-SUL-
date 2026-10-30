@@ -66,6 +66,32 @@ export async function clearCustomBg(): Promise<void> {
   } catch { /* ignore */ }
 }
 
+/**
+ * Whether the browser can load and show the picture at `url`. A fetch status would not tell: for a
+ * missing file the dev server and the packaged app both answer with the app's own page.
+ */
+export function imageLoads(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
+/**
+ * The wallpapers of the manifest whose thumbnail is really there. The pictures are git-ignored
+ * (licences unconfirmed), so a fresh clone lists wallpapers it does not have; those are left out
+ * instead of shown as broken tiles. `loads` is the check, replaceable for tests.
+ */
+export async function installedWallpapers(
+  list: Wallpaper[],
+  loads: (url: string) => Promise<boolean> = imageLoads,
+): Promise<Wallpaper[]> {
+  const present = await Promise.all(list.map((w) => loads(w.thumb)));
+  return list.filter((_, i) => present[i]);
+}
+
 export async function loadManifest(): Promise<Wallpaper[]> {
   try {
     const r = await fetch("wallpapers/manifest.json");

@@ -12,8 +12,8 @@ import GameLibrary from "./views/GameLibrary";
 import PlaytimeTracker from "./views/PlaytimeTracker";
 import SettingsView from "./views/SettingsView";
 
-function renderView(view: ViewId) {
-  if (view === "library") return <GameLibrary />;
+function renderView(view: ViewId, query: string) {
+  if (view === "library") return <GameLibrary query={query} />;
   if (view === "settings") return <SettingsView />;
   if (view === "playtime") return <PlaytimeTracker />;
   return renderModule(view.slice("module:".length));
@@ -21,9 +21,16 @@ function renderView(view: ViewId) {
 
 function Shell({ splashMs }: { splashMs: number }) {
   const [view, setView] = useState<ViewId>("library");
+  const [query, setQuery] = useState("");
   const [info, setInfo] = useState<AppInfo | null>(null);
   const [splash, setSplash] = useState(splashMs > 0);
   const done = useCallback(() => setSplash(false), []);
+
+  // The search looks through the games, which only the library lists: typing anywhere else goes there.
+  const search = useCallback((text: string) => {
+    setQuery(text);
+    if (text.trim() !== "") setView("library");
+  }, []);
 
   useEffect(() => {
     getAppInfo().then(setInfo).catch(console.error);
@@ -35,9 +42,9 @@ function Shell({ splashMs }: { splashMs: number }) {
       <BackgroundLayer />
       <div className="shell">
         <TitleBar />
-        <Sidebar active={view} onSelect={setView} />
+        <Sidebar active={view} onSelect={setView} query={query} onSearch={search} />
         <main className="content">
-          {renderView(view)}
+          {renderView(view, query)}
           <footer className="status">
             {info
               ? `v${info.version} · ${info.install_mode} install · ${info.app_root}`

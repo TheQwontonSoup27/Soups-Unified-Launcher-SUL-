@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  DEFAULT_BG, MAX_CUSTOM_BYTES, clearCustomBg, isAcceptedType, loadBg, loadCustomBg, loadManifest, saveBg, saveCustomBg,
+  DEFAULT_BG, MAX_CUSTOM_BYTES, clearCustomBg, installedWallpapers, isAcceptedType, loadBg, loadCustomBg, loadManifest, saveBg,
+  saveCustomBg,
   type BgSettings, type Wallpaper,
 } from "./background";
 import {
@@ -46,7 +47,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => { applyTheme(theme); }, [theme]);
 
   useEffect(() => {
-    void loadManifest().then(setWallpapers);
+    void loadManifest().then((list) => installedWallpapers(list)).then(setWallpapers);
     void loadCustomBg().then((c) => { if (c) show(c.blob, c.type, c.name); });
     return () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -3,7 +3,7 @@ import { MOCK_CAPABILITIES, STATUS_HELP, STATUS_ORDER, weakestStatus } from "../
 import { GameLibraryGrid } from "../components/GameLibraryGrid";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { LibraryController, tauriLibraryApi, type LibraryApi } from "../lib/library";
+import { LibraryController, filterGames, tauriLibraryApi, type LibraryApi } from "../lib/library";
 import type { Status } from "../types";
 
 const PLANNED_GAMES = [...new Set(MOCK_CAPABILITIES.map((c) => c.game))];
@@ -15,11 +15,14 @@ function headline(game: string): Status {
 
 /**
  * `api` is the backend to use; `undefined` means the real one, `null` means none (a plain browser,
- * or a test), in which case the page explains that scanning needs the desktop app.
+ * or a test), in which case the page explains that scanning needs the desktop app. `query` is what is
+ * typed in the sidebar's search box: only the games that match it are shown.
  */
-export default function GameLibrary({ api }: { api?: LibraryApi | null }) {
+export default function GameLibrary({ api, query = "" }: { api?: LibraryApi | null; query?: string }) {
   const controller = useMemo(() => new LibraryController(api === undefined ? tauriLibraryApi() : api), [api]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  const searching = query.trim() !== "" && state.games.length > 0;
+  const shown = useMemo(() => filterGames(state.games, query), [state.games, query]);
 
   useEffect(() => {
     void controller.load();
@@ -43,7 +46,11 @@ export default function GameLibrary({ api }: { api?: LibraryApi | null }) {
               ? "Browser preview: scanning needs the desktop app, so no games are listed."
               : state.scanning
                 ? "Scanning the registry, Steam libraries and drives…"
-                : (state.scanSummary ??
+                : searching
+                  ? shown.length === 0
+                    ? `No games match “${query.trim()}”.`
+                    : `Showing ${shown.length} of ${state.games.length} games matching “${query.trim()}”.`
+                  : (state.scanSummary ??
                   (state.loaded && state.games.length === 0
                     ? "No games yet. Scan to find the ones installed on this computer."
                     : "Scans only read: nothing is installed, moved or changed."))}
@@ -65,7 +72,7 @@ export default function GameLibrary({ api }: { api?: LibraryApi | null }) {
         </p>
       )}
 
-      <GameLibraryGrid state={state} actions={controller} />
+      <GameLibraryGrid state={{ ...state, games: shown }} actions={controller} />
 
       <section className="card">
         <h3>Planned game adapters</h3>

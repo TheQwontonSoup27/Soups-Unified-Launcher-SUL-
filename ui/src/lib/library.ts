@@ -142,6 +142,20 @@ export function describeScan(scan: ScanView): string {
   return parts.length > 0 ? `Found ${found} ${noun} (${parts.join(", ")}).` : `Found ${found} ${noun}.`;
 }
 
+/**
+ * The games that match a search. Every word typed must appear, in any order and in any case, in the
+ * game's name, its publisher or the label of where it was found ("Steam", "GOG"...). An empty
+ * search matches everything.
+ */
+export function filterGames(games: GameView[], query: string): GameView[] {
+  const words = query.toLowerCase().split(/\s+/).filter((word) => word !== "");
+  if (words.length === 0) return games;
+  return games.filter((game) => {
+    const text = `${game.name} ${game.publisher ?? ""} ${SOURCE_LABEL[game.source]}`.toLowerCase();
+    return words.every((word) => text.includes(word));
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Controller: all state and logic behind the library page, without any React or DOM.
 // ---------------------------------------------------------------------------

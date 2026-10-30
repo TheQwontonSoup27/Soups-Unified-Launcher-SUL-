@@ -29,8 +29,8 @@ portability, templates, Vite shell). Step 1.5 merged them on branch `step-1.5` i
 
 ## Choices made while merging (not in the owner's list; reversible)
 - **Bundler: Vite**, from the scaffold, replacing the earlier esbuild script (`ui/build.mjs`). Tests keep the earlier `tsx --test` runner.
-- **`src-tauri` is a workspace member** (scaffold layout), superseding the "excluded from the workspace" line of 0001. On Linux,
-  `cargo test --workspace` therefore needs the WebKitGTK development packages; `cargo test -p sul-core` does not.
+- **`src-tauri` is a workspace member** (scaffold layout), superseding the "excluded from the workspace" line of 0001.
+  `cargo test --workspace` therefore builds the Tauri shell too; `cargo test -p sul-core` does not.
 - **`@tauri-apps/api` instead of `withGlobalTauri`**: the webview no longer exposes a global `window.__TAURI__`. The CSP is unchanged.
 - The earlier `Vdf` / `scan_steamapps` Steam API was dropped in favour of the scaffold's registry-aware `registry::steam_library`; the earlier
   behaviours (build id and update policy recorded read-only, default-folder fallback, tolerant parsing) were ported into it and tested there.

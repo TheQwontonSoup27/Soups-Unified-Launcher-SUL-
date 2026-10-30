@@ -12,8 +12,6 @@
 //! fixed by Discord), so a "scale the corner logo to N%" setting cannot be implemented here.
 //! Choosing *which* image is used is all that can be offered.
 
-use std::path::PathBuf;
-
 use serde_json::{Map, Value, json};
 
 use crate::capability::Status;
@@ -300,26 +298,28 @@ impl<T: Transport> RichPresence<T> {
     }
 }
 
-// ---- real transport: Windows named pipe / Unix socket ----
+// ---- real transport: the Windows named pipe ----
 
-#[cfg(windows)]
-type Io = std::fs::File;
-#[cfg(unix)]
-type Io = std::os::unix::net::UnixStream;
+#[cfg(not(windows))]
+const NOT_WINDOWS: &str = "Discord presence is only implemented for Windows";
 
+/// Discord's local IPC pipe. SUL runs on Windows only, so the named pipe is the only transport;
+/// anywhere else [`IpcTransport::connect`] says so instead of opening anything.
 pub struct IpcTransport {
-    io: Io,
+    #[cfg(windows)]
+    io: std::fs::File,
 }
 
+#[cfg(windows)]
 fn io_err(e: std::io::Error) -> Error {
     Error::Io {
-        path: PathBuf::from("discord-ipc"),
+        path: std::path::PathBuf::from("discord-ipc"),
         source: e,
     }
 }
 
 #[cfg(windows)]
-fn open_pipe(n: u32) -> Option<Io> {
+fn open_pipe(n: u32) -> Option<std::fs::File> {
     std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -327,18 +327,9 @@ fn open_pipe(n: u32) -> Option<Io> {
         .ok()
 }
 
-#[cfg(unix)]
-fn open_pipe(n: u32) -> Option<Io> {
-    let base = std::env::var("XDG_RUNTIME_DIR")
-        .or_else(|_| std::env::var("TMPDIR"))
-        .or_else(|_| std::env::var("TMP"))
-        .or_else(|_| std::env::var("TEMP"))
-        .unwrap_or_else(|_| "/tmp".to_string());
-    std::os::unix::net::UnixStream::connect(format!("{base}/discord-ipc-{n}")).ok()
-}
-
 impl IpcTransport {
     /// Tries discord-ipc-0 .. discord-ipc-9 like the official library.
+    #[cfg(windows)]
     pub fn connect() -> Result<Self> {
         for n in 0..10 {
             if let Some(io) = open_pipe(n) {
@@ -349,8 +340,14 @@ impl IpcTransport {
             "Discord does not appear to be running (no IPC pipe found)".into(),
         ))
     }
+
+    #[cfg(not(windows))]
+    pub fn connect() -> Result<Self> {
+        Err(Error::Unsupported(NOT_WINDOWS))
+    }
 }
 
+#[cfg(windows)]
 impl Transport for IpcTransport {
     fn write_frame(&mut self, op: Opcode, payload: &Value) -> Result<()> {
         use std::io::Write;
@@ -380,5 +377,16 @@ impl Transport for IpcTransport {
             }
             None => Err(Error::Invalid("short Discord frame".into())),
         }
+    }
+}
+
+#[cfg(not(windows))]
+impl Transport for IpcTransport {
+    fn write_frame(&mut self, _op: Opcode, _payload: &Value) -> Result<()> {
+        Err(Error::Unsupported(NOT_WINDOWS))
+    }
+
+    fn read_frame(&mut self) -> Result<(Opcode, Value)> {
+        Err(Error::Unsupported(NOT_WINDOWS))
     }
 }

@@ -1,9 +1,10 @@
-import { mount, resetBrowser, settle, stubFetch, stubObjectUrls } from "./dom";
+import { absent, mount, resetBrowser, settle, stubFetch, stubImages, stubObjectUrls, waitFor } from "./dom";
 import assert from "node:assert/strict";
 import { File as NodeFile } from "node:buffer";
 import { afterEach, beforeEach, describe, test } from "node:test";
 import {
-  ACCEPTED, DEFAULT_BG, clearCustomBg, isAcceptedType, isVideoType, loadBg, loadCustomBg, loadManifest, saveBg, saveCustomBg,
+  ACCEPTED, DEFAULT_BG, clearCustomBg, imageLoads, installedWallpapers, isAcceptedType, isVideoType, loadBg, loadCustomBg, loadManifest,
+  saveBg, saveCustomBg,
 } from "../src/background";
 import { BackgroundLayer } from "../src/components/BackgroundLayer";
 import { SettingsProvider } from "../src/settings";
@@ -153,11 +154,38 @@ describe("the gallery manifest", () => {
   });
 });
 
+describe("which gallery pictures are really there", () => {
+  const w = (id: string) => ({ id, name: id, file: `wallpapers/${id}.jpg`, thumb: `wallpapers/thumbs/${id}.jpg`, lowRes: false });
+
+  test("a picture the browser can load is there, one it cannot is not", async () => {
+    undo.push(stubImages((url) => url === "wallpapers/thumbs/ok.jpg"));
+    assert.equal(await imageLoads("wallpapers/thumbs/ok.jpg"), true);
+    assert.equal(await imageLoads("wallpapers/thumbs/nope.jpg"), false);
+  });
+
+  test("only wallpapers whose thumbnail loads are kept, in their original order", async () => {
+    const asked: string[] = [];
+    const kept = await installedWallpapers([w("a"), w("b"), w("c"), w("d")], async (url) => {
+      asked.push(url);
+      return url.endsWith("/a.jpg") || url.endsWith("/c.jpg");
+    });
+    assert.deepEqual(kept.map((x) => x.id), ["a", "c"]);
+    assert.deepEqual(asked, ["wallpapers/thumbs/a.jpg", "wallpapers/thumbs/b.jpg", "wallpapers/thumbs/c.jpg", "wallpapers/thumbs/d.jpg"],
+      "only the small thumbnails are fetched to find out, never the full-size pictures");
+  });
+
+  test("a fresh clone (nothing loads) leaves an empty gallery, and an empty list stays empty", async () => {
+    assert.deepEqual(await installedWallpapers([w("a"), w("b")], async () => false), []);
+    assert.deepEqual(await installedWallpapers([], async () => true), []);
+  });
+});
+
 describe("the background layer", () => {
   const manifest = [{ id: "w01", name: "One", file: "wallpapers/w01.jpg", thumb: "wallpapers/thumbs/w01.jpg", lowRes: false }];
 
   async function layer() {
     undo.push(stubFetch(manifest));
+    undo.push(stubImages(() => true));
     const m = await mount(
       <SettingsProvider>
         <BackgroundLayer />
@@ -171,8 +199,8 @@ describe("the background layer", () => {
     const { host, unmount } = await layer();
     const el = host.querySelector(".bg-layer")!;
     assert.equal(el.getAttribute("aria-hidden"), "true");
-    assert.equal(el.querySelector("img, video"), null);
-    assert.equal(el.querySelector(".bg-dim"), null);
+    absent(el.querySelector("img, video"));
+    absent(el.querySelector(".bg-dim"));
     unmount();
   });
 
@@ -187,15 +215,30 @@ describe("the background layer", () => {
   test("a gallery choice that no longer exists shows nothing rather than a broken image", async () => {
     localStorage.setItem(KEY, JSON.stringify({ mode: "gallery", galleryId: "gone", overlay: 0.5 }));
     const { host, unmount } = await layer();
-    assert.equal(host.querySelector("img, video"), null);
-    assert.equal(host.querySelector(".bg-dim"), null);
+    absent(host.querySelector("img, video"));
+    absent(host.querySelector(".bg-dim"));
+    unmount();
+  });
+
+  test("a gallery choice whose picture is not installed shows nothing rather than a broken image", async () => {
+    localStorage.setItem(KEY, JSON.stringify({ mode: "gallery", galleryId: "w01", overlay: 0.5 }));
+    undo.push(stubFetch(manifest));
+    undo.push(stubImages(() => false));
+    const { host, unmount } = await mount(
+      <SettingsProvider>
+        <BackgroundLayer />
+      </SettingsProvider>,
+    );
+    await settle();
+    absent(host.querySelector("img, video"));
+    absent(host.querySelector(".bg-dim"));
     unmount();
   });
 
   test("My file shows nothing until a file is actually stored", async () => {
     localStorage.setItem(KEY, JSON.stringify({ mode: "custom", galleryId: "", overlay: 0.3 }));
     const { host, unmount } = await layer();
-    assert.equal(host.querySelector("img, video"), null);
+    absent(host.querySelector("img, video"));
     unmount();
   });
 
@@ -206,16 +249,18 @@ describe("the background layer", () => {
 
     await saveCustomBg({ blob: new NodeFile(["x"], "p.png", { type: "image/png" }) as unknown as Blob, type: "image/png", name: "p.png" });
     let m = await layer();
+    await waitFor(() => m.host.querySelector("img") !== null, "the stored picture to be read and shown");
     assert.match(m.host.querySelector("img")?.getAttribute("src") ?? "", /^blob:test\//);
-    assert.equal(m.host.querySelector("video"), null);
+    absent(m.host.querySelector("video"));
     m.unmount();
 
     await saveCustomBg({ blob: new NodeFile(["x"], "v.mp4", { type: "video/mp4" }) as unknown as Blob, type: "video/mp4", name: "v.mp4" });
     m = await layer();
+    await waitFor(() => m.host.querySelector("video") !== null, "the stored video to be read and shown");
     const video = m.host.querySelector("video")!;
     assert.ok(video, "a video element");
     assert.ok(video.hasAttribute("autoplay") && video.hasAttribute("loop") && video.hasAttribute("muted") && video.hasAttribute("playsinline"));
-    assert.equal(m.host.querySelector("img"), null);
+    absent(m.host.querySelector("img"));
     m.unmount();
   });
 });
