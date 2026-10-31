@@ -15,6 +15,8 @@ Staged priorities, not promises. Update status only with evidence.
    **Security & Trust investigation (merged into `main` at ce7d44d):** done as tested library code, not used by the app: integrity classifier (confirmed vs suspicious), static package scan, reversible quarantine, webhook address check,
    plus tripwires for every Rust file write and for network crates in the Windows build. Not done: the webhook sender and Windows Credential Manager storage (owner decisions on payload, client and dependency); wiring any of this into the app (what a person is asked, where the quarantine lives);
    capturing real network traffic; auditing WebView2. See `docs/investigations/security-and-trust-2026-10-31.md`.
+   **Spec V5.1 (owner, 2026-10-31): V5.1 builds on v1.0 and is built later.** The current build was checked against it (`docs/decisions/0006-*`): the Tier 1/Tier 2 rule for acting without asking is built (`trust::policy`); `sul-watchdog` waits (owner: not yet);
+   V5.1's dependency list has lines that do not resolve (`mmap2`, `watch_dir` 0.2, `ort` 2.0) or are Linux only (`shmem-ipc`), corrected in the record; the `reqwest` choice is recommended there (0.13 with `rustls-no-provider` and `ring`) and not added.
    **Other next slices:** the per-game hub, then public player metrics by SteamID64.
 2. Build management: import/verify, original/optimized/experimental slots, rollback; HD2 7.1.1 isolation research (separate adapter track).
 3. Mod management: profiles, ownership-aware deploy/purge, dry-run, conflicts, backup/recovery.

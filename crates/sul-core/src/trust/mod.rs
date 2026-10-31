@@ -1,4 +1,5 @@
-//! Security & Trust building blocks: integrity checks, package scanning, quarantine and webhook-address checking.
+//! Security & Trust building blocks: integrity checks, package scanning, quarantine, the rule for when SUL may act without
+//! asking ([`policy`]) and webhook-address checking.
 //!
 //! These are library code with tests. Nothing in the app calls them yet (there is no mod manager to hand them a package),
 //! and none of them is an antivirus: they look at names, sizes, file types and hashes, never at what code does.
@@ -15,6 +16,7 @@ use serde::Serialize;
 
 pub mod integrity;
 pub mod package;
+pub mod policy;
 pub mod quarantine;
 pub mod webhook;
 
