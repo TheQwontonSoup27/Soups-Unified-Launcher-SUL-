@@ -1,7 +1,8 @@
 # 0004 — Section 2: owner's answers to the wireframe review
 Date: 2026-10-29 · Status: accepted by owner (answers to the five questions asked after the Section 2 wireframes).
 **Update 2026-10-29 (owner):** go-ahead to build Section 2, first slice only: the Display density setting, per-module overrides and the inline Details panel with
-placeholders and no live data. Webhook URL storage decided (below). Built on branch `feature/section-2-density-and-redactor`; see `PROJECT_STATUS.md`.
+placeholders and no live data. Webhook URL storage decided (below). Slice 1 is merged into `main` (6902aeb). **Update 2026-10-30 (owner):** merge approved, and go-ahead for slice 2, the read-only
+Security & Trust pane (branch `feature/section-2-security-trust-pane`); see `PROJECT_STATUS.md`.
 Nothing else in Section 2 is built. The wireframes, with these answers applied, are saved in `docs/section-2-wireframes.md`.
 
 ## The owner's answers and what they mean
@@ -56,11 +57,10 @@ qualification. It now says nothing leaves this PC by default, and that the one s
 Everything else in the wireframes is unchanged. The sample figures in the pane (such as "+6.2 MB") are illustrations, not measurements.
 
 ## Order of the slices, and where they stand
-(1) The Display density setting (global Compact/Detailed plus the per-module override) and the inline Details inspector with no live data: **built on the
-feature branch, awaiting the owner's go-ahead to merge** (the first merge into `main` was not requested). (2) The read-only Security & Trust pane. (3) The Media &
+(1) The Display density setting (global Compact/Detailed plus the per-module override) and the inline Details inspector with no live data: **built and merged into `main`** (6902aeb, Windows CI passed). (2) The read-only Security & Trust pane: **built on a feature branch, awaiting the owner's go-ahead to merge**. (3) The Media &
 Clipping Engine pane as a shell with every feature Not investigated. (4) The Rust telemetry sampler (CPU and threads are measurable; per-subsystem RAM, frame-time
 variance and per-process interrupts are not, and stay Not investigated). (5) The webhook toggle with Credential Manager storage, last and only on its own go-ahead.
-Slices 2 to 5 are not started; each needs the owner's go-ahead.
+Slices 3 to 5 are not started; each needs the owner's go-ahead.
 
 ## Choices made while building slice 1 (easy to change)
 - The Performance Overview is on the Diagnostics & Performance page, as drawn. Its one section is the Media & Clipping Engine, whose stored id is `clipping-engine`.
@@ -69,3 +69,16 @@ Slices 2 to 5 are not started; each needs the owner's go-ahead.
   and lists and clears overrides. Both edit one stored value (`sul.density` in the browser's local storage).
 - Compact shows "Engine total · RAM — | CPU —" and nothing else: dashes, never sample figures. The Details panel has the rows of the finished one, every figure a
   dash, and says in words that the sampler is not built.
+
+## Choices made while building slice 2 (easy to change)
+- **A correction to the wireframe's Data sharing row.** It said the one switch that can send anything is Automated Social/Discord Webhooks. That was incomplete: Discord Rich Presence, which is built, also sends data
+  (the text "Browsing the launcher" and an optional small image name go to the Discord app, which shows them on the user's profile). The page names both, lists Rich Presence as Experimental with whether it is on right now,
+  and lists the webhook toggle as Not investigated and not built. Rich Presence was already opt-in and off by default, so the default claim "SUL sends nothing off this PC" still holds.
+- **"No network" is stated narrowly.** *(Corrected 2026-10-31. This bullet first said the Tauri framework brings an HTTP client, `reqwest`, into the build. That is wrong for Windows: it came from a cargo listing that merges every platform;
+  Tauri declares `reqwest` only for Android and Apple mobile targets. See `docs/investigations/security-and-trust-2026-10-31.md`.)* SUL's own Rust code uses no network API; the Windows dependency list contains no HTTP, socket, TLS or WebSocket crate
+  (`.github/scripts/check-network-crates.mjs`, run in CI); and the window may only load the app's own files. The page says traffic was never captured, that WebView2 was not audited, and that the inside of the framework and Windows crates was searched as text, not read.
+  `ui/tests/no-network.test.ts` fails if network code appears in SUL's own source; it reads source text, so it is a tripwire, not a proof.
+- **Rules are not capabilities.** Credentials and Data sharing are tagged "Design rule, not an audit" and carry no capability label; the five rows do. The headline is the weakest of the five (Not investigated).
+- The page is read-only. Presence is switched under Settings > Discord; the page only shows whether it is on. Nothing on the page can change a setting.
+- The `CHECKED_ON` date in `ui/src/security.ts` is the day the statements were checked against the code. It must be changed only when they are checked again.
+

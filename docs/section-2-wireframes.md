@@ -102,7 +102,7 @@ Settings  (.page-header)
 ```
 
 #### 4a. Appearance (existing cards unchanged, one new card)
-BUILT 2026-10-30 on branch `feature/section-2-density-and-redactor` (not merged): the card, the per-module strip and the inline Details panel. Differences from the drawing: nothing is measured yet,
+BUILT 2026-10-30, merged into `main` (6902aeb): the card, the per-module strip and the inline Details panel. Differences from the drawing: nothing is measured yet,
 so the compact line reads `Engine total · RAM — | CPU —` instead of sample figures, and the card says what the settings mean; the per-module strip is on the Performance Overview (there is no Media & Clipping tab yet).
 
 ```
@@ -118,6 +118,8 @@ so the compact line reads `Engine total · RAM — | CPU —` instead of sample 
 ```
 
 #### 4b. Security & Trust (only what exists, nothing overclaimed)
+BUILT 2026-10-30 on branch `feature/section-2-security-trust-pane` (not merged). Differences from the drawing: the Data sharing row also names Discord Rich Presence (it can send data too, and is Experimental, off by default,
+with "Right now: on/off"); the evidence for each rule is written out with what was not checked; the five rows are the two senders and the three protections; no controls. See decision 0004, slice 2.
 
 ```
 +----------------------------------------------------------------

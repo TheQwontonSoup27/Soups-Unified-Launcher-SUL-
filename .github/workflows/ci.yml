@@ -37,6 +37,13 @@ jobs:
           cargo clippy -p sul-core --features steam --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath steam.log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 steam.log; exit $code }
+      # The Security & Trust page says no HTTP, socket or TLS crate is compiled into the app. This keeps it true: it asks cargo
+      # for the Windows graph of sul-core and sul-tauri and fails on a network crate, tokio's `net` feature or a Windows
+      # networking API feature. The result is written as an annotation. It does not look inside WebView2, std or Steam.
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: no network crate is compiled into the app
+        run: node .github/scripts/check-network-crates.mjs
 
   ui:
     runs-on: windows-latest

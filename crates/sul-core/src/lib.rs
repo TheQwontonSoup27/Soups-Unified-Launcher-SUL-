@@ -46,6 +46,7 @@ pub mod service;
 pub mod steam;
 pub mod storage;
 pub mod templates;
+pub mod trust;
 pub mod updater;
 
 mod names;
