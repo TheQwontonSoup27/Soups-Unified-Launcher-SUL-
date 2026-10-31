@@ -21,6 +21,7 @@
 - Section 2 go-ahead (owner, 2026-10-29): first slice only (display density, per-module overrides, inline Details panel, placeholders with no live data).
 - Security & Trust investigation (owner task, 2026-10-30; `docs/decisions/0005-security-and-trust-investigation.md`, full report `docs/investigations/security-and-trust-2026-10-31.md`): built only what needs no new owner decision, as library code that nothing in the app calls and that no page control can reach;
   the webhook sender and the Windows Credential Manager storage were deliberately not built (blockers in the report); the page stays read-only.
+- Owner directions 2026-10-31 (spec V5.1 attached; `docs/decisions/0006-spec-v5-1-directions-checked-against-the-crates.md`): checked, not built. Found: `mmap2` does not exist, `shmem-ipc` is Linux-only, `reqwest`'s `rustls-tls` feature exists only in 0.12, `notify` on Windows is not an I/O completion port; first slice and five questions are proposed there.
 - Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
   Steam Web API key would live (it is a secret).
 
