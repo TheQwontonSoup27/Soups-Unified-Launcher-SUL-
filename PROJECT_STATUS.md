@@ -21,6 +21,8 @@
 - Section 2 go-ahead (owner, 2026-10-29): first slice only (display density, per-module overrides, inline Details panel, placeholders with no live data).
 - Security & Trust investigation (owner task, 2026-10-30; `docs/decisions/0005-security-and-trust-investigation.md`, full report `docs/investigations/security-and-trust-2026-10-31.md`): built only what needs no new owner decision, as library code that nothing in the app calls and that no page control can reach;
   the webhook sender and the Windows Credential Manager storage were deliberately not built (blockers in the report); the page stays read-only.
+- Owner directions and answers 2026-10-31 (spec V5.1 attached; `docs/decisions/0006-spec-v5-1-directions-checked-against-the-crates.md`): V5.1 builds on v1.0 and is built later; `sul-watchdog` not yet; on Tier 1 files a known-harmful alteration is quarantined automatically and an unknown one manually (built as `trust::policy`, decision function only, no known-harmful list exists so nothing is automatic);
+  `reqwest` recommended as 0.13 with `rustls-no-provider` and `ring` (not added). Found: `mmap2`, `watch_dir` 0.2 and `ort` 2.0 do not resolve, `shmem-ipc` is Linux only, `reqwest`'s `rustls-tls` exists only in 0.12. The current build was otherwise left as it is (table in the record).
 - Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
   Steam Web API key would live (it is a secret).
 
@@ -48,6 +50,17 @@ the webhook toggle, Not investigated, not built), and three protections (package
 roadmap modules as labelled placeholders, Team27 theme with contrast-checked token editor, backgrounds, borderless title bar,
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
+
+## Verified 2026-10-31 (branch `feature/spec-v5-1-alignment`, on top of `main` e68d2a8)
+Linux container, Node 22.23, cargo 1.97. Exact commands and results:
+- `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core -p sul-tauri --all-targets --features steam -- -D warnings` → clean.
+- `cargo test --workspace` → 325 passed, 0 failed (316 before, plus 9 new in `trust::policy`). `npm run typecheck` (in `ui`) → exit 0. `npm test` → 275 passed, 0 failed. `npm run build` → built. `node .github/scripts/check-network-crates.mjs` → exit 0 (31 / 218 / 221 crates, no network crate).
+- Mutation checks on `trust::policy`: 12 deliberate breaks (automatic for every own file; automatic for an unknown change; automatic outside SUL's folders; the list ignored; a vendor file quarantined; the folder check order swapped; folder check by text prefix; list entries too long; non-hex accepted; case-sensitive list; the automatic test widened; a reason saying "safe"), each caught by a failing test.
+- Dependency experiment for `reqwest`, and the check of V5.1's dependency lines: scratch crates outside the repo, resolved against the registry (`cargo tree --target x86_64-pc-windows-msvc`, `cargo info`). **Nothing was compiled**, so whether the recommended variant builds on Windows (NASM for `ring`) is unconfirmed.
+- Not done: Windows CI for this branch (see the section below once it exists); nothing calls `trust::policy` and no known-harmful list exists; nothing was run in the real Tauri window.
+
+## Verified in GitHub Actions: spec V5.1 alignment branch (windows-latest)
+- Branch `feature/spec-v5-1-alignment`, commit 73c7b04, run 41235353984: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`.
 
 ## Verified 2026-10-31 (branch `feature/security-trust-investigation`, on top of `feature/section-2-security-trust-pane` 55e942a)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results (full detail in `docs/investigations/security-and-trust-2026-10-31.md`):
