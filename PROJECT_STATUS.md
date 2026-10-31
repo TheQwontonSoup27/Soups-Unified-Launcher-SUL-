@@ -59,6 +59,9 @@ Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - Dependency experiment for `reqwest`, and the check of V5.1's dependency lines: scratch crates outside the repo, resolved against the registry (`cargo tree --target x86_64-pc-windows-msvc`, `cargo info`). **Nothing was compiled**, so whether the recommended variant builds on Windows (NASM for `ring`) is unconfirmed.
 - Not done: Windows CI for this branch (see the section below once it exists); nothing calls `trust::policy` and no known-harmful list exists; nothing was run in the real Tauri window.
 
+## Verified in GitHub Actions: spec V5.1 alignment branch (windows-latest)
+- Branch `feature/spec-v5-1-alignment`, commit 73c7b04, run 41235353984: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`.
+
 ## Verified 2026-10-31 (branch `feature/security-trust-investigation`, on top of `feature/section-2-security-trust-pane` 55e942a)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results (full detail in `docs/investigations/security-and-trust-2026-10-31.md`):
 - `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core --features steam --all-targets -- -D warnings` → clean.
