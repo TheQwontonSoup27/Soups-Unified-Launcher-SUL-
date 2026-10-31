@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-31 (Section 2 slice 1, display density, merged into `main` at 6902aeb; slice 2, the read-only Security & Trust pane, on branch `feature/section-2-security-trust-pane`, not merged; the Security & Trust investigation, on branch `feature/security-trust-investigation` on top of slice 2, not merged)
+**Last updated:** 2026-10-31 (Section 2 slice 1, display density, merged into `main` at 6902aeb; slice 2, the read-only Security & Trust pane, and the Security & Trust investigation merged into `main` at ce7d44d, Windows CI passed)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -37,11 +37,11 @@ recorded, Steam-library guard); `SteamManager` (thread-safe launch by `steam://r
 `ui` (Section 2 slices, on `main` since 6902aeb unless stated): a Display density card in Settings > Appearance (global Compact/Detailed, default Compact; lists and clears
 overrides) and a Performance Overview on Diagnostics & Performance with a per-module strip (Inherit Global / Always Compact / Always Detailed) and an inline "Details →" panel.
 Placeholders only: no figure is shown anywhere, the panel says the sampler is not built. Log redactor: also masks Discord webhook URLs in any text (`sul-core::logging::redact_text`).
-`ui` (slice 2, branch `feature/section-2-security-trust-pane`, not on `main` yet): Settings > Security & Trust is a read-only report instead of a placeholder: a headline that is the weakest label on the page
+`ui` (slice 2, on `main` since ce7d44d): Settings > Security & Trust is a read-only report instead of a placeholder: a headline that is the weakest label on the page
 (Not investigated), two design rules (Credentials, Data sharing) each saying how they were checked and what was not, what could send data off this PC (Discord Rich Presence, Experimental, with whether it is on right now;
 the webhook toggle, Not investigated, not built), and three protections (package scanning, quarantine, integrity checks) that are not built. No controls. A tripwire test fails if network code is added to SUL's own source.
 `ui` (investigation branch, on top of slice 2): the same page now labels those three protections Experimental, says first that they are tested code the app does not call, and states limits; the webhook row stays Not investigated, so the headline stays Not investigated.
-`crates/sul-core::trust` (branch `feature/security-trust-investigation`, not on `main`; **library code only, no Tauri command and no UI calls it**): `integrity` (a build folder against its saved manifest, read-only; confirmed violations vs allowed changes vs suspicious signals),
+`crates/sul-core::trust` (on `main` since ce7d44d; **library code only, no Tauri command and no UI calls it**): `integrity` (a build folder against its saved manifest, read-only; confirmed violations vs allowed changes vs suspicious signals),
 `package` (names and sizes of a mod folder or .zip central directory; confirmed structural problems vs suspicious signals; nothing decompressed), `quarantine` (journaled, verified, reversible move of one file; refuses original game installs; no purge), `webhook` (strict check of a Discord webhook address; the secret part never printed).
 `crates/sul-core/tests/write_sites.rs` and `.github/scripts/check-network-crates.mjs` are tripwires: every Rust place that changes a file is listed with a reason, and the Windows dependency graph is checked for network crates (the latter runs in CI).
 `ui` (on `main`): Vite + React shell with the Step 1 sidebar (Game Library first; Settings and General Playtime Tracker last), the ten
@@ -63,7 +63,12 @@ Linux container, Node 22.23, cargo 1.97. Exact commands and results (full detail
 - **Not done / unconfirmed** (list with reasons in the report): network traffic was never captured; WebView2's own network behaviour; the inside of Tauri, tokio, wry and the Windows crates (searched as text only); the webhook sender and Credential Manager storage (not built);
   the integrity, scanning and quarantine code has never run on real mods or a real install and is not reachable from the app; the `#[cfg(windows)]` tests ran only in Windows CI; nothing was run in the real Tauri window; no screen reader.
 
-## Verified in GitHub Actions: Security & Trust investigation (windows-latest)
+## Verified in GitHub Actions: merge of slice 2 and the investigation into `main` (windows-latest)
+- `main` ce7d44d, run 41216314604: `core`, `ui`, `tauri-shell` all succeeded (step results only). Local re-test of the merged `main` before pushing (the merge tree is identical to the tested branch tip af104d5): `cargo fmt --check` clean, clippy `-D warnings` clean (default and `steam`),
+  `cargo test --workspace` 316 passed 0 failed, `npm run typecheck` exit 0, `npm test` 275 passed 0 failed, `npm run build` built, `npm audit` 0 vulnerabilities, `check-network-crates.mjs` exit 0. Section 2 re-run on the branch the same day: 12 redactor tests, the density, Security & Trust and tripwire UI tests (106) 10 of 10 runs passed,
+  and headless Chromium on the built UI (density controls, Details panel, reload persistence, Security & Trust at six widths) showed no overflow, no error and no outside request. The real Tauri window was not run.
+
+## Verified in GitHub Actions: Security & Trust investigation branch (windows-latest)
 - Branch `feature/security-trust-investigation`, commit 50840b6, run 41210242339: `core`, `ui`, `tauri-shell` all succeeded (step results only; per-test output cannot be downloaded, so the `#[cfg(windows)]` junction and link tests are known to have run
   only through the `cargo test` step passing). First Windows run of the `trust` modules, of `tests/write_sites.rs`, and of `check-network-crates.mjs`: on the runner it reported the same lists as the Linux container
   (`sul-core` 31 crates, `sul-tauri` 218, `sul-tauri` with `steam` 221; no network crate, no tokio `net` feature, no Windows networking feature). CI also warns that Node.js 20 actions are deprecated (`actions/checkout@v4`, `actions/setup-node@v4`); not addressed.
