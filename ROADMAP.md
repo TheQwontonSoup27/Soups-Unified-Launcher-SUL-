@@ -12,6 +12,9 @@ Staged priorities, not promises. Update status only with evidence.
    drawings in `docs/section-2-wireframes.md`. Done: the log redactor masks Discord webhook URLs (prerequisite for the webhook toggle); the Display density setting with the
    per-module override and the inline Details panel (placeholders, no live data). The read-only Security & Trust pane (slice 2, a report with no controls). Next, smallest first: the Media & Clipping Engine pane as a
    shell with every feature Not investigated; the Rust telemetry sampler; last, the webhook toggle with the URL in Windows Credential Manager (owner's decision).
+   **Security & Trust investigation (branch `feature/security-trust-investigation`, not merged):** done as tested library code, not used by the app: integrity classifier (confirmed vs suspicious), static package scan, reversible quarantine, webhook address check,
+   plus tripwires for every Rust file write and for network crates in the Windows build. Not done: the webhook sender and Windows Credential Manager storage (owner decisions on payload, client and dependency); wiring any of this into the app (what a person is asked, where the quarantine lives);
+   capturing real network traffic; auditing WebView2. See `docs/investigations/security-and-trust-2026-10-31.md`.
    **Other next slices:** the per-game hub, then public player metrics by SteamID64.
 2. Build management: import/verify, original/optimized/experimental slots, rollback; HD2 7.1.1 isolation research (separate adapter track).
 3. Mod management: profiles, ownership-aware deploy/purge, dry-run, conflicts, backup/recovery.

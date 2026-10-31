@@ -45,7 +45,7 @@ describe("the page", () => {
     assert.equal(items(host).length, 5);
     assert.equal(badge(row(host, "Discord Rich Presence")), "Experimental");
     assert.equal(badge(row(host, "Automated Social/Discord Webhooks")), "Not investigated");
-    for (const t of ["Package scanning", "Quarantine", "Integrity checks"]) assert.equal(badge(row(host, t)), "Not investigated", t);
+    for (const t of ["Package scanning", "Quarantine", "Integrity checks"]) assert.equal(badge(row(host, t)), "Experimental", t);
     for (const li of items(host)) assert.ok(li.querySelector(".badge"), "a label on every row");
     unmount();
   });
@@ -65,11 +65,23 @@ describe("the page", () => {
     unmount();
   });
 
-  test("the webhook is shown as not built, and the three protections as not built", async () => {
+  test("the webhook is shown as not built, and the three protections as code the app does not use yet", async () => {
     const { host, unmount } = await panel();
     assert.match(row(host, "Automated Social/Discord Webhooks").textContent ?? "", /Not built, so nothing can be posted\./);
-    for (const t of ["Package scanning", "Quarantine", "Integrity checks"]) assert.match(row(host, t).textContent ?? "", /Not built\./, t);
-    assert.match(row(host, "Integrity checks").textContent ?? "", /suspicious signal will never be reported as a confirmed violation/);
+    assert.match(card(host, "Protections").textContent ?? "", /Nothing in the app calls them yet, so using SUL today does not scan, isolate or check anything\./);
+    for (const t of ["Package scanning", "Quarantine", "Integrity checks"]) {
+      assert.match(row(host, t).textContent ?? "", /In the code, not in the app\./, t);
+      assert.match(row(host, t).textContent ?? "", /Limit: Tested on/, t);
+    }
+    assert.match(row(host, "Integrity checks").textContent ?? "", /suspicious signal is never reported as a confirmed violation/);
+    assert.match(row(host, "Quarantine").textContent ?? "", /no purge or empty operation/);
+    unmount();
+  });
+
+  test("the page does not say the Windows build contains an HTTP client", async () => {
+    const { host, unmount } = await panel();
+    assert.doesNotMatch(host.textContent ?? "", /reqwest/);
+    assert.match(card(host, "Data sharing").textContent ?? "", /WebView2/);
     unmount();
   });
 

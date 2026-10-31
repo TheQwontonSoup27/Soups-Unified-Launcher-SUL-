@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-30 (Section 2 slice 1, display density, merged into `main` at 6902aeb; slice 2, the read-only Security & Trust pane, built on branch `feature/section-2-security-trust-pane`, not yet merged)
+**Last updated:** 2026-10-31 (Section 2 slice 1, display density, merged into `main` at 6902aeb; slice 2, the read-only Security & Trust pane, on branch `feature/section-2-security-trust-pane`, not merged; the Security & Trust investigation, on branch `feature/security-trust-investigation` on top of slice 2, not merged)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -19,6 +19,8 @@
   and Minimal mode's auto-transfer does not depend on it; defaults: Compact density, inline "Details →", keep the Discord RPC tab, Playtime Tracker stays a placeholder.
 - Webhook URL storage (owner, 2026-10-29): Windows Credential Manager, never the settings file. The log redactor masks webhook URLs first (done, 7b4c812); the toggle itself is not built.
 - Section 2 go-ahead (owner, 2026-10-29): first slice only (display density, per-module overrides, inline Details panel, placeholders with no live data).
+- Security & Trust investigation (owner task, 2026-10-30; `docs/decisions/0005-security-and-trust-investigation.md`, full report `docs/investigations/security-and-trust-2026-10-31.md`): built only what needs no new owner decision, as library code that nothing in the app calls and that no page control can reach;
+  the webhook sender and the Windows Credential Manager storage were deliberately not built (blockers in the report); the page stays read-only.
 - Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
   Steam Web API key would live (it is a secret).
 
@@ -38,10 +40,28 @@ Placeholders only: no figure is shown anywhere, the panel says the sampler is no
 `ui` (slice 2, branch `feature/section-2-security-trust-pane`, not on `main` yet): Settings > Security & Trust is a read-only report instead of a placeholder: a headline that is the weakest label on the page
 (Not investigated), two design rules (Credentials, Data sharing) each saying how they were checked and what was not, what could send data off this PC (Discord Rich Presence, Experimental, with whether it is on right now;
 the webhook toggle, Not investigated, not built), and three protections (package scanning, quarantine, integrity checks) that are not built. No controls. A tripwire test fails if network code is added to SUL's own source.
+`ui` (investigation branch, on top of slice 2): the same page now labels those three protections Experimental, says first that they are tested code the app does not call, and states limits; the webhook row stays Not investigated, so the headline stays Not investigated.
+`crates/sul-core::trust` (branch `feature/security-trust-investigation`, not on `main`; **library code only, no Tauri command and no UI calls it**): `integrity` (a build folder against its saved manifest, read-only; confirmed violations vs allowed changes vs suspicious signals),
+`package` (names and sizes of a mod folder or .zip central directory; confirmed structural problems vs suspicious signals; nothing decompressed), `quarantine` (journaled, verified, reversible move of one file; refuses original game installs; no purge), `webhook` (strict check of a Discord webhook address; the secret part never printed).
+`crates/sul-core/tests/write_sites.rs` and `.github/scripts/check-network-crates.mjs` are tripwires: every Rust place that changes a file is listed with a reason, and the Windows dependency graph is checked for network crates (the latter runs in CI).
 `ui` (on `main`): Vite + React shell with the Step 1 sidebar (Game Library first; Settings and General Playtime Tracker last), the ten
 roadmap modules as labelled placeholders, Team27 theme with contrast-checked token editor, backgrounds, borderless title bar,
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
+
+## Verified 2026-10-31 (branch `feature/security-trust-investigation`, on top of `feature/section-2-security-trust-pane` 55e942a)
+Linux container, Node 22.23, cargo 1.97. Exact commands and results (full detail in `docs/investigations/security-and-trust-2026-10-31.md`):
+- `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core --features steam --all-targets -- -D warnings` → clean.
+- `cargo test --workspace` → 316 passed, 0 failed: 246 `sul-core` unit tests (84 in `trust::`: integrity 16, package scanning 30, quarantine 28, webhook 7, shared 3), 16 `tests/core.rs`, 17 `tests/discord.rs`, 6 `tests/steam.rs`,
+  11 `tests/write_sites.rs` (new), 20 `sul-tauri`. `tests/windows_system.rs` and the `#[cfg(windows)]` junction/link tests compile to nothing off Windows.
+- `npm run typecheck` (in `ui`) → clean. `npm test` → 275 tests, 275 passed, 0 failed. `npm run build` → built.
+- `node .github/scripts/check-network-crates.mjs` → exit 0: Windows target `x86_64-pc-windows-msvc`, normal dependencies, `sul-core` 31 crates, `sul-tauri` 218, `sul-tauri` with `steam` 221; no network crate, no tokio `net` feature, no Windows networking feature.
+- Mutation checks (deliberate one-line breaks, each must fail a test): in the work itself 27 of the Rust trust code, 6 of the write-site tripwire and 12 of the page, all caught after three gaps were closed. Re-run before commit with a fresh sample: 10 of the trust code, 5 of the tripwire, 10 of the page.
+  One survived: the compression-ratio limit of package scanning was untested at its boundary; a boundary test was added and four breaks of that limit are now caught. A mutation that added a crate to a manifest made cargo rewrite `Cargo.lock`; it was restored from git.
+- Real browser (headless Chromium on the built `ui/dist`, no Tauri window), widths 320, 360, 420, 700, 900, 1100 px, every view and every Settings tab (72 measurements): no horizontal overflow, no page error, no console error, no `unhandledrejection`,
+  no request to another origin; Security & Trust: four cards inside the content column, five rows plus a headline, no button, field, link or tab stop, no mention of `reqwest`. The scripts are ad hoc and not in the repo.
+- **Not done / unconfirmed** (list with reasons in the report): network traffic was never captured; WebView2's own network behaviour; the inside of Tauri, tokio, wry and the Windows crates (searched as text only); the webhook sender and Credential Manager storage (not built);
+  the integrity, scanning and quarantine code has never run on real mods or a real install and is not reachable from the app; the `#[cfg(windows)]` tests ran only in Windows CI; nothing was run in the real Tauri window; no screen reader.
 
 ## Verified 2026-10-30 (branch `feature/section-2-security-trust-pane`, commit d9ec2ec, on top of `main` 6902aeb)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
@@ -56,8 +76,8 @@ Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - Stress: `tests/dom-security.test.tsx` and `tests/dom-settings.test.tsx` together, 15 of 15 runs passed.
 - Real browser (headless Chromium, built `ui/dist`, no Tauri window): at 320, 420, 700 and 1100 px wide no page error, no horizontal scroll, all four cards inside the content column, six labels (one headline, five rows) matching the
   tests, no button, field or link in the panel; "Right now" read off, then on after the sidebar presence switch was clicked; no request was made to any other origin during the run. The script is ad hoc and not in the repo.
-- Claims the page makes and how each was checked (this was done by reading, 2026-10-30): the settings the window keeps (searched the window code for storage use); no network API in SUL's own Rust code and no HTTP client declared (searched; `cargo tree`
-  shows the Tauri framework itself brings in `reqwest`/`hyper`, which is why the page says "SUL's own" code and names the unchecked part); the window's only request is for the wallpaper list file the app ships.
+- Claims the page makes and how each was checked (this was done by reading, 2026-10-30): the settings the window keeps (searched the window code for storage use); no network API in SUL's own Rust code and no HTTP client declared (searched; **correction 2026-10-31: the part about `cargo tree` that said the Tauri framework brings in `reqwest`/`hyper` was wrong for the Windows build.** It came from `cargo tree --target all`, which merges every platform;
+  Tauri declares `reqwest` only for Android and Apple mobile targets, and for `x86_64-pc-windows-msvc` there is no `reqwest`, `hyper`, `mio` or `socket2`; see the investigation report); the window's only request is for the wallpaper list file the app ships.
   **Not done:** network traffic was never captured; what the Tauri framework does with its HTTP client was not audited; nothing was run inside the real Tauri window; no screen reader was used.
 
 ## Verified in GitHub Actions: Section 2 slice 2 (windows-latest)

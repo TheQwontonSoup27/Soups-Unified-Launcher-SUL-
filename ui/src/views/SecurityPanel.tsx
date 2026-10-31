@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { StatusBadge } from "../components/StatusBadge";
 import { usePresence } from "../presence";
-import { ALL_ROWS, CHECKED_ON, DATA_SHARING, CREDENTIALS, PROTECTIONS, RULE_TAG, SENDERS, headlineStatus, type TrustRow, type TrustRule } from "../security";
+import { ALL_ROWS, CHECKED_ON, DATA_SHARING, CREDENTIALS, PROTECTIONS, PROTECTIONS_NOTE, RULE_TAG, SENDERS, headlineStatus, type TrustRow, type TrustRule } from "../security";
 
 function Rule({ rule }: { rule: TrustRule }) {
   return (
@@ -27,7 +27,7 @@ function Row({ row, extra }: { row: TrustRow; extra?: string }) {
 
 /**
  * Settings > Security & Trust: a read-only report. It shows what SUL does by design, what can send data off this PC,
- * and which protections exist (none yet). The one live fact is whether Discord presence is on right now. It has no
+ * and which protections exist as code (none is used by the app yet). The one live fact is whether Discord presence is on right now. It has no
  * controls: presence is switched under Settings > Discord.
  */
 export function SecurityPanel() {
@@ -71,6 +71,7 @@ export function SecurityPanel() {
 
       <section className="card" aria-labelledby={`${uid}-protections`}>
         <h3 id={`${uid}-protections`}>Protections</h3>
+        <p>{PROTECTIONS_NOTE}</p>
         <ul className="trust-list">
           {PROTECTIONS.map((row) => (
             <Row key={row.id} row={row} />

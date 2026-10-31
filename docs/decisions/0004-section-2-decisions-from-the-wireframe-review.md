@@ -74,9 +74,10 @@ Slices 3 to 5 are not started; each needs the owner's go-ahead.
 - **A correction to the wireframe's Data sharing row.** It said the one switch that can send anything is Automated Social/Discord Webhooks. That was incomplete: Discord Rich Presence, which is built, also sends data
   (the text "Browsing the launcher" and an optional small image name go to the Discord app, which shows them on the user's profile). The page names both, lists Rich Presence as Experimental with whether it is on right now,
   and lists the webhook toggle as Not investigated and not built. Rich Presence was already opt-in and off by default, so the default claim "SUL sends nothing off this PC" still holds.
-- **"No network" is stated narrowly.** SUL's own Rust code uses no network API and declares no HTTP client, and the window may only load the app's own files. But the Tauri framework brings in an HTTP client (`reqwest`, with `hyper`).
-  The page says SUL's own code, says traffic was never captured and that the framework's use of its client was not audited. A test (`ui/tests/no-network.test.ts`) fails if network code appears in SUL's own source; it reads source text,
-  so it is a tripwire, not a proof.
+- **"No network" is stated narrowly.** *(Corrected 2026-10-31. This bullet first said the Tauri framework brings an HTTP client, `reqwest`, into the build. That is wrong for Windows: it came from a cargo listing that merges every platform;
+  Tauri declares `reqwest` only for Android and Apple mobile targets. See `docs/investigations/security-and-trust-2026-10-31.md`.)* SUL's own Rust code uses no network API; the Windows dependency list contains no HTTP, socket, TLS or WebSocket crate
+  (`.github/scripts/check-network-crates.mjs`, run in CI); and the window may only load the app's own files. The page says traffic was never captured, that WebView2 was not audited, and that the inside of the framework and Windows crates was searched as text, not read.
+  `ui/tests/no-network.test.ts` fails if network code appears in SUL's own source; it reads source text, so it is a tripwire, not a proof.
 - **Rules are not capabilities.** Credentials and Data sharing are tagged "Design rule, not an audit" and carry no capability label; the five rows do. The headline is the weakest of the five (Not investigated).
 - The page is read-only. Presence is switched under Settings > Discord; the page only shows whether it is on. Nothing on the page can change a setting.
 - The `CHECKED_ON` date in `ui/src/security.ts` is the day the statements were checked against the code. It must be changed only when they are checked again.
