@@ -63,6 +63,11 @@ Linux container, Node 22.23, cargo 1.97. Exact commands and results (full detail
 - **Not done / unconfirmed** (list with reasons in the report): network traffic was never captured; WebView2's own network behaviour; the inside of Tauri, tokio, wry and the Windows crates (searched as text only); the webhook sender and Credential Manager storage (not built);
   the integrity, scanning and quarantine code has never run on real mods or a real install and is not reachable from the app; the `#[cfg(windows)]` tests ran only in Windows CI; nothing was run in the real Tauri window; no screen reader.
 
+## Verified in GitHub Actions: Security & Trust investigation (windows-latest)
+- Branch `feature/security-trust-investigation`, commit 50840b6, run 41210242339: `core`, `ui`, `tauri-shell` all succeeded (step results only; per-test output cannot be downloaded, so the `#[cfg(windows)]` junction and link tests are known to have run
+  only through the `cargo test` step passing). First Windows run of the `trust` modules, of `tests/write_sites.rs`, and of `check-network-crates.mjs`: on the runner it reported the same lists as the Linux container
+  (`sul-core` 31 crates, `sul-tauri` 218, `sul-tauri` with `steam` 221; no network crate, no tokio `net` feature, no Windows networking feature). CI also warns that Node.js 20 actions are deprecated (`actions/checkout@v4`, `actions/setup-node@v4`); not addressed.
+
 ## Verified 2026-10-30 (branch `feature/section-2-security-trust-pane`, commit d9ec2ec, on top of `main` 6902aeb)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - Rust: not changed in this slice. On the merged `main` 6902aeb (before this branch) `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
