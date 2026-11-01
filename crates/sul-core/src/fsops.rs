@@ -127,10 +127,21 @@ pub fn copy_file_atomic(
         ".{}.sul-tmp",
         dst.file_name().and_then(|n| n.to_str()).unwrap_or("file")
     ));
-    std::fs::copy(src, &tmp).map_err(io(src))?;
-    std::fs::File::open(&tmp)
-        .and_then(|f| f.sync_all())
-        .map_err(io(&tmp))?;
+    // The bytes are streamed into a file opened for writing and flushed through that same handle. Two
+    // things are avoided on purpose: `std::fs::copy` also copies the source's attributes, so a
+    // read-only game file would make a read-only temp file, and flushing a handle opened read-only
+    // fails on Windows with "Access is denied". The copy has default attributes, whatever `src` has.
+    {
+        let mut input = std::fs::File::open(src).map_err(io(src))?;
+        let mut out = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&tmp)
+            .map_err(io(&tmp))?;
+        std::io::copy(&mut input, &mut out).map_err(io(&tmp))?;
+        out.sync_all().map_err(io(&tmp))?;
+    }
     std::fs::rename(&tmp, dst).map_err(io(dst))?;
     Ok(())
 }
@@ -266,5 +277,40 @@ mod tests {
         protected
             .check_writable(&base.join("elsewhere").join("ok.txt"))
             .unwrap();
+    }
+
+    #[test]
+    fn a_copy_of_a_read_only_file_is_a_normal_file_and_the_source_is_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        let src = base.join("game.exe");
+        std::fs::write(&src, b"original bytes").unwrap();
+        let mut perms = std::fs::metadata(&src).unwrap().permissions();
+        perms.set_readonly(true);
+        std::fs::set_permissions(&src, perms).unwrap();
+
+        let protected = ProtectedRoots::new();
+        let dst = base.join("build").join("game.exe");
+        copy_file_atomic(&protected, &src, &dst, false).unwrap();
+
+        assert_eq!(std::fs::read(&dst).unwrap(), b"original bytes");
+        assert!(
+            !std::fs::metadata(&dst).unwrap().permissions().readonly(),
+            "the copy must not inherit the read-only flag"
+        );
+        assert!(std::fs::metadata(&src).unwrap().permissions().readonly());
+        assert!(!dst.parent().unwrap().join(".game.exe.sul-tmp").exists());
+
+        // A second copy onto the same name is refused unless the caller says it kept the old file.
+        assert!(matches!(
+            copy_file_atomic(&protected, &src, &dst, false),
+            Err(Error::DestinationExists(_))
+        ));
+
+        // Tidy: a read-only file in a temp dir cannot always be removed on Windows.
+        let mut perms = std::fs::metadata(&src).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        std::fs::set_permissions(&src, perms).unwrap();
     }
 }
