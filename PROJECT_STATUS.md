@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-31 (Section 2 slice 1, display density, merged into `main` at 6902aeb; slice 2, the read-only Security & Trust pane, and the Security & Trust investigation merged into `main` at ce7d44d, Windows CI passed)
+**Last updated:** 2026-10-31 (evening: slice 2, the Security & Trust investigation and the V5.1 alignment are on `main` (95ba76b, Windows CI passed); game-file policy, list sources and the `sul-net` boundary are on branch `feature/spec-v5-1-owner-answers`, not merged)
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -21,8 +21,9 @@
 - Section 2 go-ahead (owner, 2026-10-29): first slice only (display density, per-module overrides, inline Details panel, placeholders with no live data).
 - Security & Trust investigation (owner task, 2026-10-30; `docs/decisions/0005-security-and-trust-investigation.md`, full report `docs/investigations/security-and-trust-2026-10-31.md`): built only what needs no new owner decision, as library code that nothing in the app calls and that no page control can reach;
   the webhook sender and the Windows Credential Manager storage were deliberately not built (blockers in the report); the page stays read-only.
-- Owner directions and answers 2026-10-31 (spec V5.1 attached; `docs/decisions/0006-spec-v5-1-directions-checked-against-the-crates.md`): V5.1 builds on v1.0 and is built later; `sul-watchdog` not yet; on Tier 1 files a known-harmful alteration is quarantined automatically and an unknown one manually (built as `trust::policy`, decision function only, no known-harmful list exists so nothing is automatic);
-  `reqwest` recommended as 0.13 with `rustls-no-provider` and `ring` (not added). Found: `mmap2`, `watch_dir` 0.2 and `ort` 2.0 do not resolve, `shmem-ipc` is Linux only, `reqwest`'s `rustls-tls` exists only in 0.12. The current build was otherwise left as it is (table in the record).
+- Owner directions and answers 2026-10-31 (spec V5.1 attached; `docs/decisions/0006-spec-v5-1-directions-checked-against-the-crates.md`): V5.1 builds on v1.0 and is built later; `sul-watchdog` not yet. Round 1: on SUL's own files a known-harmful alteration is quarantined automatically and an unknown one manually; `reqwest` recommended as 0.13 with `rustls-no-provider` and `ring` (not added).
+  Round 2 (evening): `sul-net` crate boundary yes (built, empty); priority below normal until measured (2026-11-01: above normal only if it causes no micro stutters in intensive games; nothing measured yet); the owner, hive-mind and Jarvis may add to the known-harmful list (every entry records its source; a list entry never auto-quarantines a file that matches SUL's own recorded hash);
+  a game's files edited in a way that risks its integrity or its standing with an anti-cheat: both kinds do the same, SUL does not launch the game (it never touches the files), except games the owner mods themselves, which get a warning the owner can override. All of this is `trust::policy`, a decision function that nothing calls yet; no known-harmful list exists, so nothing is automatic.
 - Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
   Steam Web API key would live (it is a secret).
 
@@ -51,6 +52,18 @@ roadmap modules as labelled placeholders, Team27 theme with contrast-checked tok
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
 
+## Verified in GitHub Actions: round 2 of the V5.1 answers (windows-latest)
+- Branch `feature/spec-v5-1-owner-answers`, commit b65791a, run 41257429049: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`. First Windows build of the `sul-net` crate.
+
+## Verified 2026-10-31 evening (branch `feature/spec-v5-1-owner-answers`, on top of `main` 95ba76b)
+Linux container, Node 22.23, cargo 1.97. Exact commands and results:
+- `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core -p sul-tauri --all-targets --features steam -- -D warnings` → clean. `cargo metadata --locked --offline` → succeeds (the lock file matches the manifests).
+- `cargo test --workspace` → 332 passed, 0 failed (325 on `main`, plus 5 in `trust::policy`, now 14, plus 2 in `tests/write_sites.rs`, now 13). `npm run typecheck` (in `ui`) → exit 0. `npm test` → 275 passed, 0 failed. `npm run build` → built. `npm audit` → 0 vulnerabilities.
+  `node .github/scripts/check-network-crates.mjs` → exit 0 (31 / 218 / 221 crates, no network crate).
+- Mutation checks: 20 deliberate breaks of `trust::policy` (the game-file block, the owner-modded override, the two risk kinds, a suspicious signal blocking a game, the override leaking to other tiers, the baseline guard, hash case, list-entry validation and duplicates, source and risk kind dropped from decisions, the warning losing its wording, the automatic and block tests widened, the tier order and prefix logic) and 7 of the `sul-net` boundary tripwire, all caught.
+  Three of my own mutations were invalid at first (two did not compile, one had no edit in it); each was redone correctly before counting.
+- Not done: Windows CI for this branch (see below once it exists). Nothing calls `trust::policy`, no Play button uses it, no known-harmful list exists, the per-game "I mod this myself" switch is not built. `sul-net` has no code. Nothing was run in the real Tauri window.
+
 ## Verified 2026-10-31 (branch `feature/spec-v5-1-alignment`, on top of `main` e68d2a8)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core -p sul-tauri --all-targets --features steam -- -D warnings` → clean.
@@ -60,7 +73,7 @@ Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - Not done: Windows CI for this branch (see the section below once it exists); nothing calls `trust::policy` and no known-harmful list exists; nothing was run in the real Tauri window.
 
 ## Verified in GitHub Actions: spec V5.1 alignment branch (windows-latest)
-- Branch `feature/spec-v5-1-alignment`, commit 73c7b04, run 41235353984: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`.
+- Branch `feature/spec-v5-1-alignment`, commit 73c7b04, run 41235353984: `core`, `ui`, `tauri-shell` all succeeded (step results only). Merged into `main` as 95ba76b; run 41238632634 on the merge commit also passed all three jobs.
 
 ## Verified 2026-10-31 (branch `feature/security-trust-investigation`, on top of `feature/section-2-security-trust-pane` 55e942a)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results (full detail in `docs/investigations/security-and-trust-2026-10-31.md`):

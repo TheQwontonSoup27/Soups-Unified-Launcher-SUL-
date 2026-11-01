@@ -40,10 +40,25 @@ Not started: the overlay and `sul-ipc`, speech-to-text and text-to-speech, the p
 2. **`sul-watchdog`: not yet.**
 3. **Tier 1 quarantine: a known-harmful alteration is automatic; an unknown one is manual.** Built as `crates/sul-core/src/trust/policy.rs`, one pure function (`decide`) that touches no file. Choices I made inside the rule, open to change:
    - *Known harmful* means the SHA-256 of the file's current content is on a list the caller supplies. No such list exists, so **today nothing is automatic**. A changed hash, a change event or a suspicious signal is *unknown*, not known-harmful.
-   - The only automatic case is SUL's own file (inside a registered internal folder) with known-harmful content. A file inside a protected original install is never moved, edited or signed, even when its content is on the list: the action is "suggest the vendor's own verification". A file in neither area is never automatic.
-   - Unknown and confirmed (for example, a hash that differs from the baseline): ask the owner. Unknown and only suspicious: report, no card. The spec's "halt execution" for vendor files is **not built**, because it is not defined whether it means SUL refusing to launch the game.
+   - The only automatic case is SUL's own file (inside a registered internal folder) with known-harmful content. A file inside a protected original install is never moved, edited or signed, even when its content is on the list (the action for a game's files was refined later the same day: see "Owner answers, round 2"). A file in neither area is never automatic.
+   - Unknown and confirmed (for example, a hash that differs from the baseline): ask the owner. Unknown and only suspicious: report, no card. (The spec's "halt execution" for vendor files was undefined here; the owner answered in round 2.)
    - Still not built: the encrypted quarantine folder (spec 12.7), the list itself and where it comes from (`sul-hive-mind`), and anything that feeds `decide`.
 4. **`reqwest`: the owner asked which option is best.** See the next section.
+
+## Owner answers, round 2 (2026-10-31, evening)
+1. **Merge `feature/spec-v5-1-alignment` into `main`: yes.** Done before this round was recorded: `main` 95ba76b, Windows CI run 41238632634 passed.
+2. **`sul-net` crate boundary: yes.** Built as an empty crate (below).
+3. **Priority of background integrity work while a game runs.** The answer was "yes" to a question that offered two options. I took it as accepting the recommendation: **below normal**, because games run at normal priority. Nothing is built that sets a priority (the watchdog waits). **Owner, 2026-11-01:** above normal only if it does not cause micro stutters while playing intensive games. So the rule is a measurement gate: the watchdog runs **below normal** until frame-time measurements on intensive games show that above normal causes no added stutter; until then above normal is not used. No such measurement has been made, no game has been tested, and what counts as "no stutter" (which frame-time metric, which games, how many runs) is not decided.
+4. **Who may add to the known-harmful list: the owner, the hive-mind and Jarvis** (the spec names `sul-hive-mind` in 12.7 and Jarvis in 12.1). Built: every entry records its source (`Owner`, `HiveMind`, `Jarvis`), the reason, and when; the owner can remove any entry; a decision that rests on an entry says whose it was. Because entries can now come from software, I added one guard (my choice, open to change): **a list entry never auto-quarantines a file whose content is exactly what SUL recorded for it**. The rule is about *altered* files; a match against SUL's own baseline means the list or the baseline is wrong, so a person decides. Not built: where the list is stored, how the hive-mind or Jarvis deliver entries, and any network access for it.
+5. **A game's files edited in a way that risks the game's integrity or its standing with Easy Anti-Cheat.** The owner: there is a clear distinction between the two, but both do the same; and for games the owner mods themselves the restriction does not apply and is a warning the owner can override. Built in `trust::policy`:
+   - *The restriction* (what "halt execution" now means): for a game's files with a **confirmed** edit, SUL **does not launch the game** and points at the vendor's own verification (Steam's "Verify integrity of game files"). It never edits, moves or signs the game's files. It can only stop launches that go through SUL; nothing here stops the owner starting the game another way.
+   - *Two kinds, one action:* `RiskKind::GameIntegrity` and `RiskKind::AntiCheatFlag` are kept apart in the data so a card can say which one it is, and a test checks that they always produce the same action. Which kind applies is decided by a game adapter; SUL does not claim to know what any anti-cheat flags, and no anti-cheat file name is hard-coded.
+   - *Owner-modded games:* `GameModStatus::OwnerModded` turns the block into `WarnOwnerOverridable`: a warning that says the game's file check or its anti-cheat may object, that a ban is the vendor's decision, and that SUL does nothing to hide the change. The flag must come from an explicit choice by the owner for that game; it is never inferred from file changes and nothing else may set it. A test checks that it changes nothing for SUL's own files or any other tier. This is a warning and an override, not a way around an anti-cheat.
+   - *My choice, open to change:* only a **confirmed** edit blocks. A suspicious signal about a game's files (an unlisted program file, for example) is reported, because updates, overlays and antivirus cause those and a block would be a false alarm. The caller should log every override.
+   - Not built: the per-game switch for "I mod this game myself", the Play button using the decision, and the adapters that say which kind of risk an edit carries.
+
+### `sul-net`
+`crates/sul-net` is a workspace member with no dependencies and no code. All network code goes there when a network feature is approved; `sul-core` and any audio or speech crate stay free of network crates, so "local only" can be checked from their dependency lists. `write_sites.rs` now scans its source for file writes and has a test that it stays empty and that nothing refers to it (and that no other manifest declares a network or credential crate). The first network dependency (variant C above) is added there, in the same commit that changes those tripwires, `check-network-crates.mjs`, `no-network.test.ts` and the Security & Trust page text. The network check still covers `sul-core` and `sul-tauri` only; `sul-net` is not in the app's build yet.
 
 ## `reqwest`: the best option (dependency experiment, 2026-10-31)
 Method: scratch crates outside the repo, resolved against the registry, `cargo tree --target x86_64-pc-windows-msvc -e normal`, each with `tauri` 2 and `tauri-plugin-updater` 2.14.1, because V5.1 (12.5) will have both. Nothing was compiled and nothing was run on Windows.
@@ -78,7 +93,7 @@ Resolved as written but old: `rkyv` 0.7 (0.8.18 latest), `gilrs` 0.10 (0.11.2), 
 |---|---|---|
 | Workspace layout (11.1): `src-tauri`, `crates/sul-core`, `[workspace.dependencies]` | The same layout and mechanism | Aligned. Nothing to change |
 | Tier 2: read-only SHA-256 manifests, never modify external files (12.7) | `BuildManifest::verify`, `trust::integrity`, `ProtectedRoots` | Aligned (Experimental, not wired into the app) |
-| Tier 1: known-harmful automatic, unknown manual (owner, 12.7) | Was not expressed anywhere | **Built:** `trust::policy` (`Tier`, `Tiering`, `KnownHarmful`, `decide`), 9 tests, 12 mutations caught |
+| Tier 1: known-harmful automatic, unknown manual (owner, 12.7); Tier 2: block launch on risky edits, warning for owner-modded games | Was not expressed anywhere | **Built:** `trust::policy` (`Tier`, `Tiering`, `KnownHarmful` with sources, `decide`, `RiskKind`, `GameModStatus`), 14 tests, 20 deliberate breaks caught (round 1 had 9 tests and 12 breaks) |
 | Tier 1: encrypted quarantine, Ed25519 Minisign, binary watermarks (12.7) | Quarantine is unencrypted and user-initiated; no signing | Not built. `minisign-verify` 0.3.0 exists; key custody and "watermark" are undefined |
 | `sul-watchdog`, `sul_pack_governor`, `.sulpack`, Jarvis/Coder, llama.cpp | None exist | Not started (owner: watchdog not yet) |
 | Overlay and `sul-ipc` (6) | None exist | Not started; `shmem-ipc` is Linux only; a renderer hook is an open anti-cheat decision |
@@ -91,9 +106,9 @@ Resolved as written but old: `rkyv` 0.7 (0.8.18 latest), `gilrs` 0.10 (0.11.2), 
 | Local speech (3, 5.3) | Not built | Not started. `whisper-rs` 0.16.0 and `piper-rs` 0.2.0 exist; Windows build, VRAM and the 500 MB cap are untested |
 
 ## Still open (needs the owner)
-1. Is the crate boundary for the network (`sul-net`) wanted, so that `sul-core` and any audio crate stay free of network crates?
-2. Priority of background integrity work while a game runs: below normal (recommended, because games run at normal priority) or above normal as V5.1 10 says?
-3. Where does the known-harmful list come from, and who may add to it? Until it exists nothing is automatic.
-4. What does "halt execution" mean for a game whose files fail verification?
+1. Where does the known-harmful list live, and how do the hive-mind and Jarvis deliver entries? (Both may add to it; neither exists yet.)
+2. Which game adapter decides whether an edit is a `GameIntegrity` or an `AntiCheatFlag` risk, and from what evidence?
+3. Where does the owner declare "I mod this game myself" (a per-game setting), and should the override be logged for each launch?
+4. Priority while a game runs: **below normal until measured** (owner, 2026-11-01: above normal only if it causes no micro stutters in intensive games). Open: the measurement method, the games, and the pass/fail threshold.
 5. Webhook payload and destination setting.
 6. Data folder name and migration (`%APPDATA%\SUL` versus the identifier folder), and whether V5.1's capability scopes may be granted when their features are built.
