@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-31 (evening: slice 2, the Security & Trust investigation and the V5.1 alignment are on `main` (95ba76b, Windows CI passed); game-file policy, list sources and the `sul-net` boundary are on branch `feature/spec-v5-1-owner-answers`, not merged)
+**Last updated:** 2026-10-31 (2026-11-01: slice 2, the Security & Trust investigation, the V5.1 alignment, the game-file policy, list sources and the `sul-net` boundary are all on `main` (merge 7338559, Windows CI run 41286114241: `core`, `ui`, `tauri-shell` succeeded))
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -53,7 +53,7 @@ splash, Discord Settings panel, capability legend with the "weakest status wins"
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
 
 ## Verified in GitHub Actions: round 2 of the V5.1 answers (windows-latest)
-- Branch `feature/spec-v5-1-owner-answers`, commit b65791a, run 41257429049: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`. First Windows build of the `sul-net` crate.
+- Branch `feature/spec-v5-1-owner-answers`, commit b65791a, run 41257429049: `core`, `ui`, `tauri-shell` all succeeded (step results only). Merged into `main` on 2026-11-01 (7338559). First Windows build of the `sul-net` crate.
 
 ## Verified 2026-10-31 evening (branch `feature/spec-v5-1-owner-answers`, on top of `main` 95ba76b)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
