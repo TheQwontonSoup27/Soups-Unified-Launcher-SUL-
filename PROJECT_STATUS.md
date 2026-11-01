@@ -52,6 +52,9 @@ roadmap modules as labelled placeholders, Team27 theme with contrast-checked tok
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
 
+## Verified in GitHub Actions: round 2 of the V5.1 answers (windows-latest)
+- Branch `feature/spec-v5-1-owner-answers`, commit b65791a, run 41257429049: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`. First Windows build of the `sul-net` crate.
+
 ## Verified 2026-10-31 evening (branch `feature/spec-v5-1-owner-answers`, on top of `main` 95ba76b)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
 - `cargo fmt --all -- --check` → clean. `cargo clippy --workspace --all-targets -- -D warnings` → clean. `cargo clippy -p sul-core -p sul-tauri --all-targets --features steam -- -D warnings` → clean. `cargo metadata --locked --offline` → succeeds (the lock file matches the manifests).
