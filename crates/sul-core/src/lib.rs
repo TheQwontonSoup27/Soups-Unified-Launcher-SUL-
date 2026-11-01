@@ -29,6 +29,7 @@
 //!
 //! Sections 2-4 of the Step 1 spec (UI shell, game hub tabs, overlay) are not represented here yet.
 
+pub mod builds;
 pub mod capability;
 pub mod discord;
 pub mod error;
@@ -41,6 +42,7 @@ pub mod manifest;
 pub mod matrix;
 pub mod portability;
 pub mod registry;
+pub mod roots;
 pub mod safepath;
 pub mod service;
 pub mod steam;

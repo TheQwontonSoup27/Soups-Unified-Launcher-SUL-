@@ -153,7 +153,7 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
             "create or overwrite a file",
             "move or rename",
         ],
-        "the safe file operations: atomic write (temp file then rename), verified isolated copy; it deletes nothing",
+        "the safe file operations: atomic write (temp file then rename), verified isolated copy, single-file atomic copy, a backup copy that never overwrites an existing one, moving a file aside into a recovery folder; it deletes nothing",
     ),
     (
         "crates/sul-core/src/journal.rs",
@@ -173,6 +173,11 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "crates/sul-core/src/logging.rs",
         &["create a folder", "open a file or pipe with options"],
         "appends to the log file; every line passes the redactor first",
+    ),
+    (
+        "crates/sul-core/src/roots.rs",
+        &["create or overwrite a file"],
+        "writes the small marker file that names a library root, with create-new so an existing file is never overwritten; the list of roots itself is saved through the atomic write",
     ),
     (
         "crates/sul-core/src/service.rs",

@@ -242,18 +242,24 @@ mod tests {
 
     fn manifest(variant: Variant) -> BuildManifest {
         BuildManifest {
-            schema_version: 1,
+            schema_version: crate::manifest::SCHEMA_VERSION,
             game_id: "g".into(),
             display_name: "G".into(),
             variant,
             base_version: "1".into(),
             source: "test".into(),
+            source_manifest_id: None,
             files: vec![FileEntry {
                 path: "a.bin".into(),
                 sha256: "00".into(),
                 size: 1,
             }],
+            patches: Vec::new(),
+            profiles: Vec::new(),
+            compatibility_notes: String::new(),
             created_unix: 0,
+            verified_unix: None,
+            updated_unix: 0,
             state: State::Ready,
             notes: String::new(),
         }

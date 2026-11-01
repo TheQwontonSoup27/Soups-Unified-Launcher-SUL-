@@ -73,6 +73,28 @@ impl Journal {
         })
     }
 
+    /// Run `f` as one journaled operation: begin, then commit if it succeeds or abort (with the error text)
+    /// if it fails. A crash in between leaves the operation pending, which [`Self::pending`] reports.
+    pub fn run<T>(
+        &self,
+        id: &str,
+        op: &str,
+        detail: &str,
+        f: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        self.begin(id, op, detail)?;
+        match f() {
+            Ok(v) => {
+                self.commit(id)?;
+                Ok(v)
+            }
+            Err(e) => {
+                let _ = self.abort(id, &e.to_string());
+                Err(e)
+            }
+        }
+    }
+
     /// Operations that began but never committed or aborted. Unparseable lines (e.g. a torn
     /// final write) are ignored rather than treated as fatal.
     pub fn pending(&self) -> Result<Vec<Pending>> {
@@ -98,4 +120,18 @@ impl Journal {
         }
         Ok(open)
     }
+}
+
+/// A journal id that is unique within this process and, in practice, across runs: `<prefix>-<unix nanos>-<n>`.
+pub fn fresh_id(prefix: &str) -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!(
+        "{prefix}-{nanos}-{}",
+        COUNTER.fetch_add(1, Ordering::Relaxed)
+    )
 }

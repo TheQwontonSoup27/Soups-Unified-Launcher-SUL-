@@ -61,6 +61,104 @@ pub fn atomic_write(protected: &ProtectedRoots, target: &Path, data: &[u8]) -> R
     Ok(())
 }
 
+/// Keep `bytes` (the exact current content of `target`) in a new file beside it named
+/// `<target file name>.<tag>`, or `.<tag>.1`, `.<tag>.2`, … when that name is taken.
+///
+/// The file is created with create-new, so an existing backup is never overwritten and never reused:
+/// every backup is a distinct record of what the file held at that moment. Returns the backup's path.
+pub fn backup_beside(
+    protected: &ProtectedRoots,
+    target: &Path,
+    tag: &str,
+    bytes: &[u8],
+) -> Result<PathBuf> {
+    protected.check_writable(target)?;
+    let dir = target
+        .parent()
+        .ok_or_else(|| Error::Invalid("target has no parent".into()))?;
+    let name = target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| Error::Invalid("target has no usable file name".into()))?;
+    if tag.is_empty() || tag.contains(['/', '\\', '\0']) {
+        return Err(Error::Invalid(format!("unusable backup tag {tag:?}")));
+    }
+    for n in 0u32..10_000 {
+        let candidate = if n == 0 {
+            dir.join(format!("{name}.{tag}"))
+        } else {
+            dir.join(format!("{name}.{tag}.{n}"))
+        };
+        match std::fs::File::create_new(&candidate) {
+            Ok(mut f) => {
+                f.write_all(bytes).map_err(io(&candidate))?;
+                f.sync_all().map_err(io(&candidate))?;
+                return Ok(candidate);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(io(&candidate)(e)),
+        }
+    }
+    Err(Error::Invalid(format!(
+        "too many backups of {} with tag {tag}",
+        target.display()
+    )))
+}
+
+/// Copy one file to `dst` through a temp file in `dst`'s folder, fsync, then rename into place.
+///
+/// `src` is only read. An existing `dst` is replaced only when `replace` is set; callers that replace
+/// something must have kept it first (see [`move_aside`]). Refuses a protected `dst`.
+pub fn copy_file_atomic(
+    protected: &ProtectedRoots,
+    src: &Path,
+    dst: &Path,
+    replace: bool,
+) -> Result<()> {
+    protected.check_writable(dst)?;
+    if !replace && dst.exists() {
+        return Err(Error::DestinationExists(dst.to_path_buf()));
+    }
+    let dir = dst
+        .parent()
+        .ok_or_else(|| Error::Invalid("dst has no parent".into()))?;
+    std::fs::create_dir_all(dir).map_err(io(dir))?;
+    let tmp = dir.join(format!(
+        ".{}.sul-tmp",
+        dst.file_name().and_then(|n| n.to_str()).unwrap_or("file")
+    ));
+    std::fs::copy(src, &tmp).map_err(io(src))?;
+    std::fs::File::open(&tmp)
+        .and_then(|f| f.sync_all())
+        .map_err(io(&tmp))?;
+    std::fs::rename(&tmp, dst).map_err(io(dst))?;
+    Ok(())
+}
+
+/// Move `file` to `<recovery_dir>/<rel>` (same volume, a rename) instead of deleting or overwriting it.
+///
+/// Both ends must be outside protected roots, and the recovery path must not exist yet: nothing already
+/// kept is ever replaced. Returns where the file now is.
+pub fn move_aside(
+    protected: &ProtectedRoots,
+    file: &Path,
+    recovery_dir: &Path,
+    rel: &Path,
+) -> Result<PathBuf> {
+    protected.check_writable(file)?;
+    let to = recovery_dir.join(rel);
+    protected.check_writable(&to)?;
+    if to.exists() {
+        return Err(Error::DestinationExists(to));
+    }
+    let dir = to
+        .parent()
+        .ok_or_else(|| Error::Invalid("recovery path has no parent".into()))?;
+    std::fs::create_dir_all(dir).map_err(io(dir))?;
+    std::fs::rename(file, &to).map_err(io(file))?;
+    Ok(to)
+}
+
 fn copy_recursive(src: &Path, dst: &Path) -> Result<()> {
     std::fs::create_dir_all(dst).map_err(io(dst))?;
     for entry in std::fs::read_dir(src).map_err(io(src))? {
