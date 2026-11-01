@@ -326,13 +326,17 @@ fn std_fs_is_only_imported_by_names_the_scan_understands() {
 }
 
 #[test]
-fn only_the_steam_launcher_starts_another_program() {
+fn only_the_steam_launcher_and_the_process_module_start_another_program() {
+    // `steam.rs` asks the Steam app to open a steam://run address. `process.rs` is the one place that starts a game
+    // build or a registered tool: directly, with an argument list and never through a shell, after the checks in that file.
     for (name, text) in sources() {
         let code = production(&name, &text);
         let spawns = code.contains("Command::new")
             || code.contains(".spawn(")
             || code.contains("ShellExecute");
-        assert_eq!(spawns, name == "crates/sul-core/src/steam.rs", "{name}");
+        let may =
+            name == "crates/sul-core/src/steam.rs" || name == "crates/sul-core/src/process.rs";
+        assert_eq!(spawns, may, "{name}");
     }
 }
 

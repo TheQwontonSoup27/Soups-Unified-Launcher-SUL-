@@ -29,8 +29,10 @@
 //!
 //! Sections 2-4 of the Step 1 spec (UI shell, game hub tabs, overlay) are not represented here yet.
 
+pub mod adapters;
 pub mod builds;
 pub mod capability;
+pub mod catalogue;
 pub mod discord;
 pub mod error;
 pub mod fsops;
@@ -41,8 +43,10 @@ pub mod logging;
 pub mod manifest;
 pub mod matrix;
 pub mod portability;
+pub mod process;
 pub mod registry;
 pub mod roots;
+pub mod runtime;
 pub mod safepath;
 pub mod service;
 pub mod steam;
@@ -54,3 +58,6 @@ pub mod updater;
 mod names;
 
 pub use error::{Error, Result};
+
+#[cfg(test)]
+mod testkit;
