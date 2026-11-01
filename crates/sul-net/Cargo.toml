@@ -1,0 +1,13 @@
+[package]
+name = "sul-net"
+description = "The only place network code may live in Soups Unified Launcher. Empty on purpose until the owner approves a network feature."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+# No dependencies on purpose. The first network dependency (see docs/decisions/0006: reqwest 0.13 with `rustls-no-provider` and
+# `ring`) is added here and nowhere else, in the same commit that changes `crates/sul-core/tests/write_sites.rs`,
+# `.github/scripts/check-network-crates.mjs`, `ui/tests/no-network.test.ts` and the Security & Trust page text.
+[dependencies]

@@ -30,7 +30,7 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Every production source file in the app: `crates/sul-core/src` and `src-tauri/src`, as (path under the repo, text).
+/// Every production source file in the app: `crates/sul-core/src`, `crates/sul-net/src` and `src-tauri/src`, as (path under the repo, text).
 fn sources() -> Vec<(String, String)> {
     let root = repo();
     let mut files = Vec::new();
@@ -38,6 +38,7 @@ fn sources() -> Vec<(String, String)> {
         &root.join("crates").join("sul-core").join("src"),
         &mut files,
     );
+    rust_files(&root.join("crates").join("sul-net").join("src"), &mut files);
     rust_files(&root.join("src-tauri").join("src"), &mut files);
     files.sort();
     files
@@ -526,6 +527,7 @@ fn no_credential_store_or_network_client_is_declared_yet() {
     for manifest in [
         "Cargo.toml",
         "crates/sul-core/Cargo.toml",
+        "crates/sul-net/Cargo.toml",
         "src-tauri/Cargo.toml",
     ] {
         let text = fs::read_to_string(root.join(manifest)).unwrap();
@@ -556,5 +558,90 @@ fn no_credential_store_or_network_client_is_declared_yet() {
                 );
             }
         }
+    }
+}
+
+/// The dependency lines of a manifest (everything under any `[...dependencies...]` table), comments and blanks removed.
+fn dependency_lines(manifest: &str) -> Vec<String> {
+    let mut in_deps = false;
+    let mut out = Vec::new();
+    for line in manifest.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_deps = line.contains("dependencies");
+            if in_deps && line.matches('.').count() > 0 && !line.ends_with("dependencies]") {
+                // `[dependencies.foo]` or `[target.'cfg(...)'.dependencies.foo]` is itself a dependency declaration.
+                out.push(line.to_owned());
+            }
+        } else if in_deps && !line.is_empty() && !line.starts_with('#') {
+            out.push(line.to_owned());
+        }
+    }
+    out
+}
+
+#[test]
+fn the_dependency_line_reader_sees_every_way_to_declare_one() {
+    let manifest = "[package]\nname = \"x\"\n[dependencies]\n# a comment\n\nfoo = \"1\"\n[dev-dependencies]\nbar.workspace = true\n\
+                    [build-dependencies]\n[target.'cfg(windows)'.dependencies]\nbaz = \"2\"\n[dependencies.qux]\nversion = \"3\"\n";
+    let lines = dependency_lines(manifest);
+    for want in [
+        "foo = \"1\"",
+        "bar.workspace = true",
+        "baz = \"2\"",
+        "[dependencies.qux]",
+        "version = \"3\"",
+    ] {
+        assert!(
+            lines.iter().any(|l| l == want),
+            "{want} not seen in {lines:?}"
+        );
+    }
+    assert!(dependency_lines("[package]\nname = \"x\"\n[dependencies]\n# nothing\n").is_empty());
+}
+
+#[test]
+fn sul_net_is_an_empty_boundary_until_the_network_is_decided() {
+    // Owner decision 2026-10-31 (docs/decisions/0006): all network code goes in `sul-net`. Until a network feature is approved the
+    // crate has no dependencies and no code, and nothing refers to it, so "no network crate is compiled into the app" stays true.
+    // When the first network dependency is approved, change this test in the same commit as the page text and the matrix.
+    let root = repo();
+    let manifest = fs::read_to_string(root.join("crates/sul-net/Cargo.toml")).unwrap();
+    assert_eq!(
+        dependency_lines(&manifest),
+        Vec::<String>::new(),
+        "sul-net declares a dependency"
+    );
+
+    let lib = fs::read_to_string(root.join("crates/sul-net/src/lib.rs")).unwrap();
+    let code: Vec<&str> = lib
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with("//"))
+        .collect();
+    assert!(
+        code.is_empty(),
+        "sul-net has code before a network feature was approved: {code:?}"
+    );
+    let mut files = Vec::new();
+    rust_files(&root.join("crates/sul-net/src"), &mut files);
+    assert_eq!(files.len(), 1, "sul-net has more than lib.rs: {files:?}");
+
+    let workspace = fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    assert!(
+        workspace.contains("\"crates/sul-net\""),
+        "sul-net is not a workspace member"
+    );
+    for manifest in ["crates/sul-core/Cargo.toml", "src-tauri/Cargo.toml"] {
+        let text = fs::read_to_string(root.join(manifest)).unwrap();
+        assert!(
+            !text.contains("sul-net"),
+            "{manifest} depends on sul-net before a network feature was approved"
+        );
+    }
+    for (name, text) in sources() {
+        assert!(
+            !text.contains("sul_net"),
+            "{name} uses sul_net before a network feature was approved"
+        );
     }
 }
