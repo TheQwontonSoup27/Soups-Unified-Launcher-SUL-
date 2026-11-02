@@ -480,6 +480,25 @@ mod tests {
     }
 
     #[test]
+    fn a_schema_newer_by_even_one_is_refused_by_the_migration_itself() {
+        // `from_json` has other checks behind it, so this asks the migration directly: exactly one newer is
+        // refused, the current version is accepted as it is, and a refused value is left as it was.
+        for newer in [SCHEMA_VERSION + 1, SCHEMA_VERSION + 6, u32::MAX] {
+            let mut v: serde_json::Value = serde_json::from_str(&v1_text()).unwrap();
+            v["schema_version"] = json!(newer);
+            let before = v.clone();
+            assert!(
+                migrate_value(&mut v).is_err(),
+                "schema {newer} should be refused"
+            );
+            assert_eq!(v, before, "a refused value is not touched");
+        }
+        let mut v: serde_json::Value = serde_json::from_str(&v1_text()).unwrap();
+        v["schema_version"] = json!(SCHEMA_VERSION);
+        assert_eq!(migrate_value(&mut v).unwrap(), None);
+    }
+
+    #[test]
     fn the_migration_step_never_changes_a_value_that_is_already_there() {
         let mut v: serde_json::Value = serde_json::from_str(&v1_text()).unwrap();
         v["patches"] = json!([{"id": "p", "description": "d", "applied_unix": 5}]);
