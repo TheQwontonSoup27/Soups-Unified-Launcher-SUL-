@@ -146,6 +146,24 @@ pub fn copy_file_atomic(
     Ok(())
 }
 
+/// Rename `from` (a file or a folder) to `to`, which must not exist. Neither end may be inside a protected root.
+///
+/// Used to put a finished folder in its place and to move a kept file back where it came from. Nothing is
+/// ever replaced: an existing destination is an error, so a rename can always be undone by renaming back.
+pub fn rename_new(protected: &ProtectedRoots, from: &Path, to: &Path) -> Result<()> {
+    protected.check_writable(from)?;
+    protected.check_writable(to)?;
+    if std::fs::symlink_metadata(to).is_ok() {
+        return Err(Error::DestinationExists(to.to_path_buf()));
+    }
+    let dir = to
+        .parent()
+        .ok_or_else(|| Error::Invalid("destination has no parent".into()))?;
+    std::fs::create_dir_all(dir).map_err(io(dir))?;
+    std::fs::rename(from, to).map_err(io(from))?;
+    Ok(())
+}
+
 /// Move `file` to `<recovery_dir>/<rel>` (same volume, a rename) instead of deleting or overwriting it.
 ///
 /// Both ends must be outside protected roots, and the recovery path must not exist yet: nothing already

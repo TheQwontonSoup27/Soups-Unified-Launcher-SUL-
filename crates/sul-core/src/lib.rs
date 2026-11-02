@@ -42,6 +42,7 @@ pub mod library;
 pub mod logging;
 pub mod manifest;
 pub mod matrix;
+pub mod mods;
 pub mod portability;
 pub mod process;
 pub mod registry;

@@ -295,6 +295,37 @@ impl BuildRegistry {
         Ok(BuildManifest::load_file(ctx.protected, &path)?.0)
     }
 
+    /// Change the manifest of a managed build and save it atomically (spec 1.3: patches, profile references and
+    /// the file inventory move together when a mod profile is deployed or purged).
+    ///
+    /// `change` gets a copy; nothing is saved unless it returns `Ok` and the result is still a valid manifest for
+    /// the same game. An install that stays where it is cannot be changed here: SUL never writes to it.
+    pub fn update_manifest(
+        &mut self,
+        ctx: &Ctx,
+        id: &str,
+        change: impl FnOnce(&mut BuildManifest) -> Result<()>,
+    ) -> Result<()> {
+        let rec = self.record(id)?.clone();
+        if !matches!(rec.location, Location::Managed { .. }) {
+            return Err(Error::Invalid(format!(
+                "build {id:?} is an install that stays where it is; its record is not changed here"
+            )));
+        }
+        let path = self.manifest_file(ctx, &rec)?;
+        let (before, _) = BuildManifest::load_file(ctx.protected, &path)?;
+        let mut after = before.clone();
+        change(&mut after)?;
+        if after.game_id != before.game_id || after.variant != before.variant {
+            return Err(Error::Invalid(
+                "a manifest change may not change the game or the variant".into(),
+            ));
+        }
+        after.validate()?;
+        after.touch();
+        after.save_file(ctx.protected, &path)
+    }
+
     fn next_id(&self, game_id: &str, slot: &str, build_parent: Option<&Path>) -> Result<String> {
         for n in 1u32..10_000 {
             let id = format!("{game_id}-{slot}-{n}");

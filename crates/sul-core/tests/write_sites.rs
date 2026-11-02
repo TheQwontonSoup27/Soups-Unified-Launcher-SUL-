@@ -152,8 +152,9 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
             "create a folder",
             "create or overwrite a file",
             "move or rename",
+            "open a file or pipe with options",
         ],
-        "the safe file operations: atomic write (temp file then rename), verified isolated copy, single-file atomic copy, a backup copy that never overwrites an existing one, moving a file aside into a recovery folder; it deletes nothing",
+        "the safe file operations: atomic write (temp file then rename), verified isolated copy, single-file atomic copy (streamed into a file opened for writing, then flushed there), a backup copy that never overwrites an existing one, moving a file aside into a recovery folder; it deletes nothing",
     ),
     (
         "crates/sul-core/src/journal.rs",

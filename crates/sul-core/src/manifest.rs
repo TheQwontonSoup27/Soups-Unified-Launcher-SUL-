@@ -121,7 +121,7 @@ pub fn hash_file(path: &Path) -> Result<(String, u64)> {
 
 /// Walk `root` and return sorted entries. Symlinks are rejected: managed builds must be plain
 /// files so a build can't smuggle in content from elsewhere.
-fn walk(root: &Path) -> Result<BTreeMap<String, std::path::PathBuf>> {
+pub(crate) fn walk(root: &Path) -> Result<BTreeMap<String, std::path::PathBuf>> {
     let mut out = BTreeMap::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -150,6 +150,20 @@ fn walk(root: &Path) -> Result<BTreeMap<String, std::path::PathBuf>> {
         }
     }
     Ok(out)
+}
+
+/// The sorted inventory (path, SHA-256, size) of every plain file under `root`. A symlink anywhere is an error.
+pub(crate) fn inventory(root: &Path) -> Result<Vec<FileEntry>> {
+    let mut files = Vec::new();
+    for (rel, p) in walk(root)? {
+        let (sha256, size) = hash_file(&p)?;
+        files.push(FileEntry {
+            path: rel,
+            sha256,
+            size,
+        });
+    }
+    Ok(files)
 }
 
 impl BuildManifest {
