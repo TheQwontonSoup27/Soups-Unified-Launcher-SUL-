@@ -1073,10 +1073,14 @@ pub fn purge(reg: &mut BuildRegistry, ctx: &Ctx, build_id: &str) -> Result<Purge
     }
 
     let nothing_left = left_paths.is_empty();
-    reg.update_manifest(ctx, build_id, |m| {
-        revert_in_manifest(m, &done, &header, nothing_left);
-        Ok(())
-    })?;
+    // A purge that put nothing back and forgot nothing changes nothing, and so does not rewrite the manifest
+    // (that would only move its "updated" time).
+    if !done.is_empty() || nothing_left {
+        reg.update_manifest(ctx, build_id, |m| {
+            revert_in_manifest(m, &done, &header, nothing_left);
+            Ok(())
+        })?;
+    }
     if nothing_left {
         state.deployment = None;
     } else if let Some(d) = state.deployment.as_mut() {
@@ -1555,6 +1559,9 @@ mod tests {
         std::fs::write(f.dir().join("data/a.bin"), "and this").unwrap();
         let before = f.snap();
         let manifest = f.manifest();
+        // The manifest records when it was last updated in whole seconds. Wait for the second to change, so a
+        // purge that rewrote the manifest for no reason could not hide behind an equal timestamp.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
 
         let plan = plan_purge(&f.reg, &f.w.ctx(), &f.build).unwrap();
         assert!(
