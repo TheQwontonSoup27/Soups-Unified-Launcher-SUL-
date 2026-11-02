@@ -146,6 +146,12 @@ pub fn copy_file_atomic(
     Ok(())
 }
 
+/// Create a folder and its parents, unless it is inside a protected root. An existing folder is fine.
+pub fn create_dir(protected: &ProtectedRoots, dir: &Path) -> Result<()> {
+    protected.check_writable(dir)?;
+    std::fs::create_dir_all(dir).map_err(io(dir))
+}
+
 /// Rename `from` (a file or a folder) to `to`, which must not exist. Neither end may be inside a protected root.
 ///
 /// Used to put a finished folder in its place and to move a kept file back where it came from. Nothing is

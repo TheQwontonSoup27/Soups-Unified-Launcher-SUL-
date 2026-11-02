@@ -30,6 +30,7 @@
 //! Sections 2-4 of the Step 1 spec (UI shell, game hub tabs, overlay) are not represented here yet.
 
 pub mod adapters;
+pub mod builder;
 pub mod builds;
 pub mod capability;
 pub mod catalogue;
