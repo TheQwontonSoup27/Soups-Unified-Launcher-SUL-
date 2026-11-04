@@ -92,8 +92,10 @@ See `PROJECT_STATUS.md` for the exact commands, counts and the Windows CI run.
 
 ## Not built, and not verified
 
-- **Spec 1.2 acquisition**: downloading or acquiring historical builds, and investigating SteamCMD, depot and manifest workflows.
-  Neither the investigation nor any download code exists. Only importing an install the owner already has is built.
+- **Spec 1.2 acquisition**: downloading or acquiring historical builds. No download code exists; only importing an install the owner
+  already has is built. The SteamCMD investigation is a first look at one Valve page (`docs/investigations/steamcmd-acquisition-2026-11-03.md`):
+  it does not mention older builds or manifest ids, says nothing about terms, and its examples put a password on the command line,
+  which SUL's no-passwords rule (0003) rules out. Depot and manifest workflows are not investigated.
 - **Spec 1.6** save-data transfer: deferred by the spec.
 - **No UI and no Tauri command** for any of Module 1 or 2.1 to 2.4. The Game Library in the app still works as before.
 - **No real game adapter**, no real mod, no real tool. Helldivers 2 7.1.1 isolation is untouched. Whether a game accepts a deployed
@@ -107,6 +109,6 @@ See `PROJECT_STATUS.md` for the exact commands, counts and the Windows CI run.
 
 - Which game gets the first real adapter, and who decides whether a change to its files is a confirmed risk (0006).
 - Connecting `trust::policy` to the launch, and the per-game "I mod this myself" setting (0006).
-- Whether to investigate acquisition (SteamCMD and depot workflows) next, or build the UI for what exists.
+- Whether to investigate acquisition further (depot and manifest workflows, and the terms) next, or build the UI for what exists.
 - Confirm which repository is the audio modder meant in spec 2.4.
 - The project licence (still open from spec section 7).
