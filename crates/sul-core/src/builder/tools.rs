@@ -538,7 +538,7 @@ pub fn known_tools() -> &'static [KnownTool] {
             id: "hd2-audio-modder",
             name: "Helldivers 2 Audio Modder (GitHub: RaidingForPants/hd2-audio-modder; \"Pants' HD2 Audio Modder\" is taken to be this)",
             status: Status::NotInvestigated,
-            finding: "The repository page links a LICENSE file described as MIT, and ships prebuilt Windows programs in its releases. Its 1.10 release notes state no licence or redistribution terms. It needs Python 3.10 or later to run from source and vgmstream for audio playback.",
+            finding: "The repository page lists a LICENSE file and links to it as the MIT license. Its README gives set-up steps for Windows, Linux and macOS and says prebuilt programs (made with PyInstaller) are in its releases. Its 1.10 release notes state no licence or redistribution terms. It needs Python 3.10 or later to run from source and vgmstream for audio playback.",
             not_established: "That the repository is the tool spec 2.4 means; the text of the licence (not read); whether the MIT licence covers everything in a release (including the vgmstream and other parts that come with it); whether it works with the current game; whether its output is accepted by the game. SUL has never run it.",
         },
         KnownTool {

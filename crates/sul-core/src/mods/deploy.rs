@@ -242,6 +242,33 @@ fn removed_dir(t: &Target, purge_id: &str) -> PathBuf {
     t.state_dir.join("recovery").join(purge_id).join("removed")
 }
 
+/// The folder rules applied to where a write would really land, not only to how its path is spelled.
+///
+/// `refusal_for` looks at the text of a path. A path can spell a protected folder in another way (`./`, a
+/// doubled slash, or on Windows a short name such as `ANTICH~1`), and the write goes to the place the path
+/// resolves to. So the resolved place is checked as well, relative to the build folder. Anything that does
+/// not resolve to somewhere inside the build folder is refused.
+fn landing_refusal(layout: &ModLayout, build_dir: &Path, target_path: &Path) -> Option<String> {
+    let outside = || {
+        Some(format!(
+            "{} lands outside the build folder",
+            target_path.display()
+        ))
+    };
+    let Ok(root) = build_dir.canonicalize() else {
+        return outside();
+    };
+    let landed = safepath::resolve_lenient(target_path);
+    let Ok(rel) = landed.strip_prefix(&root) else {
+        return outside();
+    };
+    let rel: Vec<String> = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    layout.refusal_for(&rel.join("/"))
+}
+
 fn key(layout: &ModLayout, path: &str) -> String {
     if layout.case_insensitive {
         path.to_ascii_lowercase()
@@ -463,6 +490,15 @@ fn prepare(
             continue;
         }
         let target_path = safepath::join_within(&t.dir, &path)?;
+        if let Some(why) = landing_refusal(layout, &t.dir, &target_path) {
+            let mut pr =
+                Problem::error(ProblemKind::OutsideAllowedFolders, Some(winner.mod_id), why);
+            pr.path = Some(path.clone());
+            if !problems.contains(&pr) {
+                problems.push(pr);
+            }
+            continue;
+        }
         let mut store_problem = |msg: String| {
             let mut pr = Problem::error(ProblemKind::StoreFileProblem, Some(winner.mod_id), msg);
             pr.path = Some(path.clone());
@@ -591,11 +627,10 @@ fn apply_to_manifest(m: &mut BuildManifest, entries: &[LedgerEntry], header: &De
             sha256: e.deployed_sha256.clone(),
             size: e.deployed_size,
         };
-        match m
-            .files
-            .iter_mut()
-            .find(|f| f.path.eq_ignore_ascii_case(&e.path))
-        {
+        // The ledger path is spelled as the manifest spells the file when it lists it, so an exact match is the
+        // right one; matching ignoring case would merge two files that differ only in case on a layout that
+        // keeps them apart.
+        match m.files.iter_mut().find(|f| f.path == e.path) {
             Some(slot) => *slot = fe,
             None => m.files.push(fe),
         }
@@ -621,10 +656,7 @@ fn revert_in_manifest(
     nothing_left: bool,
 ) {
     for e in entries {
-        let at = m
-            .files
-            .iter()
-            .position(|f| f.path.eq_ignore_ascii_case(&e.path));
+        let at = m.files.iter().position(|f| f.path == e.path);
         match (e.manifest_before.as_ref(), at) {
             (Some(before), Some(i)) => m.files[i] = before.clone(),
             (Some(before), None) => m.files.push(before.clone()),
@@ -976,6 +1008,17 @@ pub struct PurgeReport {
 
 /// Take a deployed profile out of its build, touching only what the ledger proves is SUL's.
 pub fn purge(reg: &mut BuildRegistry, ctx: &Ctx, build_id: &str) -> Result<PurgeReport> {
+    purge_inner(reg, ctx, build_id, &mut |_| {})
+}
+
+/// [`purge`] with a hook that runs just before a deployed file is moved out (tests use it to change the file at
+/// that moment).
+fn purge_inner(
+    reg: &mut BuildRegistry,
+    ctx: &Ctx,
+    build_id: &str,
+    before_removal: &mut dyn FnMut(&Path),
+) -> Result<PurgeReport> {
     let t = target(reg, ctx, build_id)?;
     let mut state = load_state(&t)?;
     let Some(dep) = state.deployment.clone() else {
@@ -998,7 +1041,12 @@ pub fn purge(reg: &mut BuildRegistry, ctx: &Ctx, build_id: &str) -> Result<Purge
         "purge_profile",
         &format!("{} from {build_id}", dep.profile_id),
         || {
-            for item in items.iter().filter(|i| i.action.changes_files()) {
+            for (e, item) in dep
+                .entries
+                .iter()
+                .zip(&items)
+                .filter(|(_, i)| i.action.changes_files())
+            {
                 let to = safepath::join_within(&t.dir, &item.path)?;
                 let rel = safepath::validate_relative(&item.path)?;
                 let removes = matches!(
@@ -1006,6 +1054,16 @@ pub fn purge(reg: &mut BuildRegistry, ctx: &Ctx, build_id: &str) -> Result<Purge
                     PurgeAction::RemoveModFile | PurgeAction::RemoveModFileAndRestoreBase
                 );
                 if removes {
+                    before_removal(&to);
+                    // The plan hashed this file earlier. It is hashed again right before it moves, so a change
+                    // made in between (by the user or the game) is not carried off as if it were SUL's file.
+                    // Stopping here is safe: the ledger is unchanged, and running the purge again finishes the job.
+                    if !matches!(now_of(&to)?, Now::File(h) if h == e.deployed_sha256) {
+                        return Err(Error::Invalid(format!(
+                            "{} changed while the purge was running; it was left where it is. Run the purge again to finish",
+                            e.path
+                        )));
+                    }
                     fsops::move_aside(ctx.protected, &to, &removed_to, &rel)?;
                 }
                 if matches!(
@@ -1186,6 +1244,30 @@ pub fn undo_purge(
         }
     }
 
+    // The ledger is written first, as a deploy does it. If the moves below stop part way, the files that went
+    // back are already listed as SUL's, so a purge finishes the job. The purge record is dropped at the same
+    // time: an undo that stopped cannot be repeated, and a purge is the way forward.
+    let entries: Vec<LedgerEntry> = rec.reverted.iter().map(|r| r.entry.clone()).collect();
+    match state.deployment.as_mut() {
+        Some(d) => {
+            d.entries.extend(entries.clone());
+            d.entries.sort_by(|a, b| a.path.cmp(&b.path));
+        }
+        None => {
+            state.deployment = Some(Deployment {
+                id: rec.deployment.id.clone(),
+                profile_id: rec.deployment.profile_id.clone(),
+                profile_name: rec.deployment.profile_name.clone(),
+                status: DeployStatus::InProgress,
+                started_unix: rec.deployment.started_unix,
+                finished_unix: None,
+                entries: entries.clone(),
+            });
+        }
+    }
+    state.last_purge = None;
+    save_state(ctx, &t, &state)?;
+
     let op = fresh_id("undo-purge");
     ctx.journal.run(
         &op,
@@ -1206,29 +1288,14 @@ pub fn undo_purge(
         },
     )?;
 
-    let entries: Vec<LedgerEntry> = rec.reverted.iter().map(|r| r.entry.clone()).collect();
     reg.update_manifest(ctx, build_id, |m| {
         apply_to_manifest(m, &entries, &rec.deployment);
         Ok(())
     })?;
-    match state.deployment.as_mut() {
-        Some(d) => {
-            d.entries.extend(entries.clone());
-            d.entries.sort_by(|a, b| a.path.cmp(&b.path));
-        }
-        None => {
-            state.deployment = Some(Deployment {
-                id: rec.deployment.id.clone(),
-                profile_id: rec.deployment.profile_id.clone(),
-                profile_name: rec.deployment.profile_name.clone(),
-                status: DeployStatus::Deployed,
-                started_unix: rec.deployment.started_unix,
-                finished_unix: Some(now_unix()),
-                entries: entries.clone(),
-            });
-        }
+    if let Some(d) = state.deployment.as_mut() {
+        d.status = DeployStatus::Deployed;
+        d.finished_unix.get_or_insert_with(now_unix);
     }
-    state.last_purge = None;
     state.push_history(HistoryItem {
         id: op,
         kind: HistoryKind::UndoPurge,
@@ -2175,5 +2242,245 @@ mod tests {
                 .is_err()
         );
         assert_eq!(f.manifest(), before);
+    }
+    // ---- found by an independent review of the purge and deploy code ----
+
+    #[test]
+    fn a_build_with_a_profile_deployed_is_not_moved_until_it_is_purged() {
+        let mut f = fx();
+        two_file_mod(&mut f);
+        let original = f.snap();
+        f.deploy().unwrap();
+        let build = f.build.clone();
+
+        let err = f
+            .reg
+            .migrate_build(&f.w.ctx(), &build, "hdd")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("deployed"), "{err}");
+        // Nothing moved: the records are still found, and the build still matches its manifest.
+        assert!(deployment_of(&f.reg, &f.w.ctx(), &build).unwrap().is_some());
+        assert!(f.sound());
+
+        f.purge();
+        assert_eq!(f.snap(), original);
+        f.reg.migrate_build(&f.w.ctx(), &build, "hdd").unwrap();
+        assert!(f.sound());
+    }
+
+    #[test]
+    fn a_build_whose_mod_records_cannot_be_read_is_not_moved() {
+        let mut f = fx();
+        two_file_mod(&mut f);
+        f.deploy().unwrap();
+        let build = f.build.clone();
+        f.purge();
+        std::fs::write(f.state_json(), b"{ not json").unwrap();
+        assert!(f.reg.migrate_build(&f.w.ctx(), &build, "hdd").is_err());
+        // Valid JSON that is not the records is just as unreadable.
+        std::fs::write(f.state_json(), b"{}").unwrap();
+        assert!(f.reg.migrate_build(&f.w.ctx(), &build, "hdd").is_err());
+        assert!(f.sound());
+    }
+
+    #[test]
+    fn an_undo_that_stops_part_way_is_finished_by_a_purge() {
+        let mut f = fx();
+        let original = f.snap();
+        two_file_mod(&mut f);
+        f.deploy().unwrap();
+        let pid = f.purge().purge_id.unwrap();
+        assert_eq!(f.snap(), original);
+
+        // Make the second file (mods/ui.txt) fail inside the undo, after its checks passed: the build's mods
+        // folder is protected for this one call.
+        let mut stricter = f.w.protected.clone();
+        stricter.add(&f.dir().join("mods")).unwrap();
+        let ctx = Ctx {
+            roots: &f.w.roots,
+            protected: &stricter,
+            journal: &f.w.journal,
+            disk: &f.w.disk,
+        };
+        let build = f.build.clone();
+        assert!(undo_purge(&mut f.reg, &ctx, &build, &pid).is_err());
+        assert_eq!(f.read("data/a.bin"), "NEW-A", "the first file went back");
+
+        // The ledger already lists both files again, so nothing is left without an owner.
+        let d = deployment_of(&f.reg, &f.w.ctx(), &build)
+            .unwrap()
+            .expect("the ledger is written before the files move");
+        assert_eq!(d.entries.len(), 2);
+        assert_eq!(d.status, DeployStatus::InProgress);
+
+        // A purge finishes the job: the build is as it was before the profile was ever deployed.
+        let r = f.purge();
+        assert!(r.left.is_empty(), "{:?}", r.left);
+        assert_eq!(f.snap(), original);
+        assert!(f.sound());
+        assert!(deployment_of(&f.reg, &f.w.ctx(), &build).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_finished_undo_marks_the_deployment_as_complete() {
+        let mut f = fx();
+        two_file_mod(&mut f);
+        f.deploy().unwrap();
+        let pid = f.purge().purge_id.unwrap();
+        let build = f.build.clone();
+        undo_purge(&mut f.reg, &f.w.ctx(), &build, &pid).unwrap();
+        let d = deployment_of(&f.reg, &f.w.ctx(), &build).unwrap().unwrap();
+        assert_eq!(d.status, DeployStatus::Deployed);
+        assert!(d.finished_unix.is_some());
+        assert_eq!(d.entries.len(), 2);
+        assert!(f.sound());
+    }
+
+    #[test]
+    fn a_protected_folder_is_refused_however_the_path_to_it_is_spelled() {
+        let l = layout();
+        for p in [
+            "data/anticheat/guard.dll",
+            "data/./anticheat/guard.dll",
+            "data//anticheat/guard.dll",
+            "data\\anticheat\\guard.dll",
+            "data/anticheat/./guard.dll",
+            "./data/anticheat/guard.dll",
+            "data/ANTICHEAT/guard.dll",
+            "data/../data/anticheat/guard.dll",
+            "data/../anticheat/guard.dll",
+        ] {
+            assert!(l.refusal_for(p).is_some(), "{p} was not refused");
+        }
+        for p in ["data/other/./file.bin", "./data/file.bin", "mods//ui.txt"] {
+            assert_eq!(l.refusal_for(p), None, "{p}");
+        }
+
+        // The same by where the write would really land.
+        let f = fx();
+        let dir = f.dir();
+        std::fs::create_dir_all(dir.join("data/anticheat")).unwrap();
+        for p in ["data/./anticheat/guard.dll", "data//anticheat/guard.dll"] {
+            let target = safepath::join_within(&dir, p).unwrap();
+            assert!(landing_refusal(&l, &dir, &target).is_some(), "{p}");
+        }
+        let fine = safepath::join_within(&dir, "data/other/x.bin").unwrap();
+        assert_eq!(landing_refusal(&l, &dir, &fine), None);
+        let outside = dir.parent().unwrap().join("elsewhere.bin");
+        assert!(landing_refusal(&l, &dir, &outside).is_some());
+    }
+
+    #[test]
+    fn a_file_changed_after_the_plan_but_before_its_move_is_not_removed() {
+        let mut f = fx();
+        two_file_mod(&mut f);
+        f.deploy().unwrap();
+        let build = f.build.clone();
+
+        // The user edits mods/ui.txt after the purge planned it and before it was moved.
+        let err = purge_inner(&mut f.reg, &f.w.ctx(), &build, &mut |p: &Path| {
+            if p.ends_with("mods/ui.txt") {
+                std::fs::write(p, "USER EDIT").unwrap();
+            }
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("changed while the purge was running"), "{err}");
+        assert_eq!(f.read("mods/ui.txt"), "USER EDIT");
+
+        // Running the purge again finishes the rest and leaves the edited file, reporting it.
+        let r = f.purge();
+        assert_eq!(f.read("mods/ui.txt"), "USER EDIT");
+        assert!(
+            r.left.iter().any(
+                |i| i.path == "mods/ui.txt" && i.action == PurgeAction::LeaveChangedSinceDeploy
+            ),
+            "{:?}",
+            r.left
+        );
+        assert_eq!(f.read("data/a.bin"), "AAAA");
+        assert!(r.recovery_dir.is_none() || !r.removed.contains(&"mods/ui.txt".to_owned()));
+    }
+
+    #[test]
+    fn files_that_differ_only_in_case_are_kept_apart_in_the_manifest_when_the_ledger_says_so() {
+        let f = fx();
+        let mut m = f.manifest();
+        let before: Vec<String> = m.files.iter().map(|e| e.path.clone()).collect();
+        assert!(before.contains(&"data/a.bin".to_owned()));
+        let entry = LedgerEntry {
+            path: "data/A.bin".into(),
+            mod_id: "ui".into(),
+            mod_version: "1.0".into(),
+            action: EntryAction::Add,
+            deployed_sha256: "ff".repeat(32),
+            deployed_size: 2,
+            base_sha256: None,
+            base_size: None,
+            manifest_before: None,
+        };
+        let header = DeploymentHeader {
+            id: "dep-1".into(),
+            profile_id: "p".into(),
+            profile_name: "P".into(),
+            started_unix: 1,
+        };
+        apply_to_manifest(&mut m, std::slice::from_ref(&entry), &header);
+        let paths: Vec<String> = m.files.iter().map(|e| e.path.clone()).collect();
+        assert!(paths.contains(&"data/a.bin".to_owned()), "{paths:?}");
+        assert!(paths.contains(&"data/A.bin".to_owned()), "{paths:?}");
+
+        revert_in_manifest(&mut m, &[&entry], &header, true);
+        let after: Vec<String> = m.files.iter().map(|e| e.path.clone()).collect();
+        assert_eq!(after, before);
+    }
+    #[test]
+    fn a_folder_where_a_deployed_file_was_is_left_alone_by_a_purge() {
+        let mut f = fx();
+        two_file_mod(&mut f);
+        f.deploy().unwrap();
+        std::fs::remove_file(f.dir().join("mods/ui.txt")).unwrap();
+        put(&f.dir().join("mods/ui.txt/keep.txt"), "mine");
+
+        let r = f.purge();
+        assert!(
+            r.left.iter().any(
+                |i| i.path == "mods/ui.txt" && i.action == PurgeAction::LeaveChangedSinceDeploy
+            ),
+            "{:?}",
+            r.left
+        );
+        assert_eq!(f.read("mods/ui.txt/keep.txt"), "mine");
+    }
+
+    #[test]
+    fn an_undo_is_refused_when_the_removed_copy_or_the_put_back_original_was_changed() {
+        // The kept copy of the removed mod file was edited.
+        let mut f = fx();
+        two_file_mod(&mut f);
+        f.deploy().unwrap();
+        let r = f.purge();
+        let pid = r.purge_id.clone().unwrap();
+        let kept = r.recovery_dir.clone().unwrap().join("mods/ui.txt");
+        std::fs::write(&kept, "EDITED").unwrap();
+        let snap = f.snap();
+        let err = undo_purge(&mut f.reg, &f.w.ctx(), &f.build, &pid)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("missing or changed"), "{err}");
+        assert_eq!(f.snap(), snap);
+
+        // The original that the purge put back was edited by the user.
+        let mut g = fx();
+        two_file_mod(&mut g);
+        g.deploy().unwrap();
+        let pid = g.purge().purge_id.unwrap();
+        std::fs::write(g.dir().join("data/a.bin"), "MINE").unwrap();
+        let err = undo_purge(&mut g.reg, &g.w.ctx(), &g.build, &pid)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("is not where the purge left it"), "{err}");
+        assert_eq!(g.read("data/a.bin"), "MINE");
     }
 }

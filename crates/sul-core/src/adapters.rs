@@ -96,9 +96,19 @@ impl ModLayout {
     /// Why a mod may not write `rel_path` (a forward-slash relative path), or `None` when it may.
     /// The forbidden list is checked first.
     pub fn refusal_for(&self, rel_path: &str) -> Option<String> {
+        // A path that climbs out of its folder is refused outright: `data/../anticheat/x` starts with an
+        // allowed folder and would otherwise be matched against the wrong place.
+        if rel_path.replace('\\', "/").split('/').any(|p| p == "..") {
+            return Some(format!("{rel_path} climbs out of its folder"));
+        }
         let key = |s: &str| {
             let s = s.replace('\\', "/");
-            let s = s.trim_matches('/').to_owned();
+            // `./` and a doubled slash mean the same folder as without them.
+            let s = s
+                .split('/')
+                .filter(|p| !p.is_empty() && *p != ".")
+                .collect::<Vec<_>>()
+                .join("/");
             if self.case_insensitive {
                 s.to_ascii_lowercase()
             } else {

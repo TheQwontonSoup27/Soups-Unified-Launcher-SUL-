@@ -779,6 +779,7 @@ impl BuildRegistry {
             )));
         }
         let src = self.build_dir(ctx, id)?;
+        refuse_while_mods_are_deployed(&src, id)?;
         let mpath = self.manifest_file(ctx, &rec)?;
         let (manifest, _) = BuildManifest::load_file(ctx.protected, &mpath)?;
         let total: u64 = manifest.files.iter().map(|f| f.size).sum();
@@ -854,6 +855,37 @@ impl BuildRegistry {
             reason: reason.to_owned(),
         });
         self.save(ctx.protected)
+    }
+}
+
+/// A mod deployment keeps its ownership records beside the build, in `<build id>.mods/state.json` (see
+/// `mods::deploy`). Moving only the build folder would leave those records behind: the new place would look
+/// as if nothing was deployed, and a later purge would take the mod files for the game's own. So a build with
+/// a profile deployed (or with a state file that cannot be read) is not moved until it has been purged.
+/// Records of purges already finished stay beside the old copy.
+fn refuse_while_mods_are_deployed(build_dir: &Path, id: &str) -> Result<()> {
+    let Some(parent) = build_dir.parent() else {
+        return Ok(());
+    };
+    let state = parent.join(format!("{id}.mods")).join("state.json");
+    let text = match std::fs::read_to_string(&state) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(io(&state)(e)),
+    };
+    let unreadable = || {
+        Error::Invalid(format!(
+            "build {id:?} has mod records in {} that cannot be read, so it is not moved",
+            state.display()
+        ))
+    };
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|_| unreadable())?;
+    match v.get("deployment") {
+        Some(d) if d.is_null() => Ok(()),
+        Some(_) => Err(Error::Invalid(format!(
+            "build {id:?} has a mod profile deployed; purge it before moving the build, so its ownership records are not left behind"
+        ))),
+        None => Err(unreadable()),
     }
 }
 
