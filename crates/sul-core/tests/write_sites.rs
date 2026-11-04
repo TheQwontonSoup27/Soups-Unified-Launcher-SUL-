@@ -148,12 +148,15 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
     (
         "crates/sul-core/src/fsops.rs",
         &[
+            "change permissions, links or times",
             "copy a file",
             "create a folder",
             "create or overwrite a file",
+            "delete a file",
             "move or rename",
+            "open a file or pipe with options",
         ],
-        "the safe file operations: atomic write (temp file then rename), verified isolated copy; it deletes nothing",
+        "the safe file operations: atomic write (temp file then rename), verified isolated copy, single-file atomic copy (streamed into a new file, flushed there, then put in place by a hard link that never replaces a file that is already there), a backup copy that never overwrites an existing one, moving a file aside into a recovery folder; the one thing it deletes is the temp file (`.<name>.sul-tmp`) that its own copy made, never any other file (a test checks every call)",
     ),
     (
         "crates/sul-core/src/journal.rs",
@@ -173,6 +176,11 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "crates/sul-core/src/logging.rs",
         &["create a folder", "open a file or pipe with options"],
         "appends to the log file; every line passes the redactor first",
+    ),
+    (
+        "crates/sul-core/src/roots.rs",
+        &["create or overwrite a file"],
+        "writes the small marker file that names a library root, with create-new so an existing file is never overwritten; the list of roots itself is saved through the atomic write",
     ),
     (
         "crates/sul-core/src/service.rs",
@@ -321,13 +329,17 @@ fn std_fs_is_only_imported_by_names_the_scan_understands() {
 }
 
 #[test]
-fn only_the_steam_launcher_starts_another_program() {
+fn only_the_steam_launcher_and_the_process_module_start_another_program() {
+    // `steam.rs` asks the Steam app to open a steam://run address. `process.rs` is the one place that starts a game
+    // build or a registered tool: directly, with an argument list and never through a shell, after the checks in that file.
     for (name, text) in sources() {
         let code = production(&name, &text);
         let spawns = code.contains("Command::new")
             || code.contains(".spawn(")
             || code.contains("ShellExecute");
-        assert_eq!(spawns, name == "crates/sul-core/src/steam.rs", "{name}");
+        let may =
+            name == "crates/sul-core/src/steam.rs" || name == "crates/sul-core/src/process.rs";
+        assert_eq!(spawns, may, "{name}");
     }
 }
 
@@ -390,17 +402,49 @@ fn every_write_site_says_why() {
 }
 
 #[test]
-fn only_the_quarantine_deletes_anything() {
-    // Deletion is the dangerous operation. Only the quarantine may do it, and only after a verified copy (its own tests
-    // and its guard test list the exact four places).
+fn only_the_quarantine_and_the_copys_own_temp_file_are_ever_deleted() {
+    // Deletion is the dangerous operation. The quarantine may do it, and only after a verified copy (its own tests
+    // and its guard test list the exact four places). The safe file copy in `fsops.rs` may remove the temp file that
+    // it made itself and nothing else (the next test checks every call). No other file may delete anything.
     for (name, text) in sources() {
         let kinds = kinds_in(&production(&name, &text));
         let deletes = kinds.contains("delete a file") || kinds.contains("delete a folder");
         assert!(
-            !deletes || name == "crates/sul-core/src/trust/quarantine.rs",
+            !deletes
+                || name == "crates/sul-core/src/trust/quarantine.rs"
+                || name == "crates/sul-core/src/fsops.rs",
             "{name} deletes"
         );
     }
+}
+
+#[test]
+fn the_only_deletion_in_fsops_is_the_temp_file_the_copy_made_itself() {
+    let name = "crates/sul-core/src/fsops.rs";
+    let (_, text) = sources()
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .expect("fsops.rs is scanned");
+    let code = production(name, &text);
+    assert!(!code.contains("remove_dir"), "fsops removes no folder");
+    assert!(
+        code.contains(".sul-tmp"),
+        "the temp name is no longer made here"
+    );
+    let mut calls = 0;
+    for (at, _) in code.match_indices("remove_file(") {
+        let rest = &code[at + "remove_file(".len()..];
+        let arg = rest[..rest.find(')').expect("a closing bracket")].trim();
+        assert!(
+            arg == "&tmp" || arg == "tmp",
+            "fsops removes {arg:?}; only the temp file the copy made may be removed"
+        );
+        calls += 1;
+    }
+    assert!(
+        calls >= 1,
+        "found no deletion; this test would pass without checking anything"
+    );
 }
 
 /// Names that look like a secret when used as a field or key (`name:` or `"name"`).

@@ -1,6 +1,6 @@
 # Project Status — Soups Unified Launcher (SUL)
 
-**Last updated:** 2026-10-31 (evening: slice 2, the Security & Trust investigation and the V5.1 alignment are on `main` (95ba76b, Windows CI passed); game-file policy, list sources and the `sul-net` boundary are on branch `feature/spec-v5-1-owner-answers`, not merged)
+**Last updated:** 2026-11-03 (spec Module 1 and items 2.1 to 2.4 are built as library code on branch `feature/spec-modules-1-and-2-1-to-2-4`, decision 0007, **not merged**; the rest of this line is the state of `main` on 2026-11-01) (2026-11-01: slice 2, the Security & Trust investigation, the V5.1 alignment, the game-file policy, list sources and the `sul-net` boundary are all on `main` (merge 7338559, Windows CI run 41286114241: `core`, `ui`, `tauri-shell` succeeded))
 
 ## Decisions made (owner approved)
 - Stack: Tauri 2 + Rust core + React/TypeScript UI. Windows first. (`docs/decisions/0001-stack.md`)
@@ -24,8 +24,9 @@
 - Owner directions and answers 2026-10-31 (spec V5.1 attached; `docs/decisions/0006-spec-v5-1-directions-checked-against-the-crates.md`): V5.1 builds on v1.0 and is built later; `sul-watchdog` not yet. Round 1: on SUL's own files a known-harmful alteration is quarantined automatically and an unknown one manually; `reqwest` recommended as 0.13 with `rustls-no-provider` and `ring` (not added).
   Round 2 (evening): `sul-net` crate boundary yes (built, empty); priority below normal until measured (2026-11-01: above normal only if it causes no micro stutters in intensive games; nothing measured yet); the owner, hive-mind and Jarvis may add to the known-harmful list (every entry records its source; a list entry never auto-quarantines a file that matches SUL's own recorded hash);
   a game's files edited in a way that risks its integrity or its standing with an anti-cheat: both kinds do the same, SUL does not launch the game (it never touches the files), except games the owner mods themselves, which get a warning the owner can override. All of this is `trust::policy`, a decision function that nothing calls yet; no known-harmful list exists, so nothing is automatic.
-- Still open: licence, manifest schema migration policy, social/networking, Medal access level, first full game adapter, where a
-  Steam Web API key would live (it is a secret).
+- Spec Module 1 and 2.1 to 2.4 (owner, 2026-11-01, sent again 2026-11-03: "implement steps 1 to 2.4 and stop at 3"; `docs/decisions/0007-spec-modules-1-and-2-1-to-2-4.md`): built as library code in `sul-core`, with no Tauri command and no UI; manifest schema: keep the JSON file, forward-only migration; first real game adapter: none yet. **On branch `feature/spec-modules-1-and-2-1-to-2-4`, not merged.**
+- Still open: licence, social/networking, Medal access level, first full game adapter (none yet), where a
+  Steam Web API key would live (it is a secret). The manifest migration policy was settled 2026-11-01 (0007).
 
 ## What exists
 `crates/sul-core` (Rust): registry game scanner (Steam libraries on every drive, GOG, Uninstall keys, drive probing) behind
@@ -52,8 +53,24 @@ roadmap modules as labelled placeholders, Team27 theme with contrast-checked tok
 splash, Discord Settings panel, capability legend with the "weakest status wins" headline rule, and the Game Library grid: scanned games
 side by side, Play for Steam games, and an expandable compatibility matrix per card (eight tick boxes, verdict and capability badges).
 
+## Spec Module 1 and 2.1 to 2.4 (branch `feature/spec-modules-1-and-2-1-to-2-4`, not merged)
+`crates/sul-core` gained, as library code that nothing in the app calls: `adapters` and `catalogue` (spec 1.1), `builds` and manifest schema 2 with forward-only migration (1.2, 1.3), `process` and `runtime` (1.4), `roots` (1.5), `mods` (2.1: store, profiles, deploy, Purge, Purge & Deploy, undo of the latest purge), `builder` (2.2 recipes and provenance, 2.3 reversible byte patches and an external-tool registry, 2.4 the records only). Everything is tested on made-up folders and files; no real game, mod or tool was involved. Not built: spec 1.2 acquisition (no download code; the SteamCMD look is one page, `docs/investigations/steamcmd-acquisition-2026-11-03.md`), 1.6 (deferred by the spec), any UI or Tauri command, any real game adapter. Details, calls made and the independent review: decision 0007; audio-tool research: `docs/investigations/audio-modding-2026-11-01.md`.
+
+## Verified 2026-11-03 (branch `feature/spec-modules-1-and-2-1-to-2-4`, on top of `main` 7338559 and the docs branch db3a33a)
+Linux container, Node 22.23.4, cargo 1.97.0. Exact commands and results (one script, `fmt`, both clippy runs, `cargo test --workspace --locked`, the network check):
+- `cargo fmt --all --check` → exit 0. `cargo clippy --workspace --all-targets --locked -- -D warnings` → exit 0. `cargo clippy -p sul-core --features steam --all-targets --locked -- -D warnings` → exit 0.
+- `cargo test --workspace --locked` → 508 passed, 0 failed (332 on `main` before this branch).
+- `node .github/scripts/check-network-crates.mjs` → exit 0 (31 / 218 / 221 crates, no network crate, no tokio net feature, no Windows networking feature).
+- `npm run typecheck` (in `ui`) → exit 0. `npm test` → 275 passed, 0 failed, 0 todo. The branch changes no UI file. `npm run build` and `npm audit` were not re-run for this branch.
+- Mutation checks, 2026-11-03 (a deliberate break of production code, then the tests): 17 breaks of the fixes that came out of the independent review (copy put over an existing file, stale temp name, failed copy leaving its temp file, build moved with mods deployed, unreadable mod records accepted, undo writing no ledger first, undo not marked deployed, landing-place check never refusing, purge not re-hashing before a move, manifest matched ignoring case, `..` and `./` not handled, a folder removed where a file was, undo not checking the put-back original or the removed copy) were each caught by a test; 4 breaks of the new deletion tripwire (fsops deleting something other than its temp file, another file deleting, fsops removing a folder) were each caught. An earlier campaign by separate agents in separate copies of the repository closed other gaps (for example the check that refuses a manifest newer than this build); I did not re-run it and its full results are not in the repository.
+- A first run of the full script this session failed two `write_sites` tests because `fsops.rs` now removes its own temp file and makes a hard link; the tripwire was updated deliberately (reason written beside the entry) and tightened, not loosened blindly.
+- Windows CI: see "Verified in GitHub Actions: spec Module 1 and 2.1 to 2.4" below. Nothing was run in a real Tauri window, against a real game, Steam client, mod or tool.
+
+## Verified in GitHub Actions: spec Module 1 and 2.1 to 2.4 (windows-latest)
+- Branch `feature/spec-modules-1-and-2-1-to-2-4`. Run 41743845275 on 7009725 (the code and the first docs): `core`, `ui`, `tauri-shell` all succeeded. Run 41744013116 on b7feb56 (adds the SteamCMD note and doc pointers): all three succeeded. Step results only; per-test output was not read. The commit that records these two results is docs-only and was not given its own CI run. Not merged into `main`.
+
 ## Verified in GitHub Actions: round 2 of the V5.1 answers (windows-latest)
-- Branch `feature/spec-v5-1-owner-answers`, commit b65791a, run 41257429049: `core`, `ui`, `tauri-shell` all succeeded (step results only). Not merged into `main`. First Windows build of the `sul-net` crate.
+- Branch `feature/spec-v5-1-owner-answers`, commit b65791a, run 41257429049: `core`, `ui`, `tauri-shell` all succeeded (step results only). Merged into `main` on 2026-11-01 (7338559). First Windows build of the `sul-net` crate.
 
 ## Verified 2026-10-31 evening (branch `feature/spec-v5-1-owner-answers`, on top of `main` 95ba76b)
 Linux container, Node 22.23, cargo 1.97. Exact commands and results:
@@ -245,6 +262,7 @@ Linux container, Node 22, cargo 1.97. Exact commands and results:
   Whether all 38 are correct, or whether games were missed, was not checked against a list.
 
 ## NOT verified
+- Spec Module 1 and 2.1 to 2.4 (branch, not merged): never run against a real game, mod, Steam client or tool. The hard-link fallback for FAT/exFAT volumes, Windows 8.3 short names (`ANTICH~1`) and a power cut on a real disk were not tested. Nothing in the app calls any of it. See decision 0007.
 - The merged build has not been run by the owner on Windows (only CI built and tested it). The scanner's real-machine result for the
   merged code is unconfirmed.
 - The desktop app has not been launched from this branch (`npm run dev`). The borderless title-bar buttons, the move from
@@ -282,8 +300,8 @@ Left in place on purpose: the Windows Store icon sizes in `src-tauri/icons/` (st
 `design-references/` at the repo root, which does not exist; the path in those two files is the mismatch, not the images).
 
 ## Next action
-0. Owner decisions waiting: (a) merge `fix/section1-defects-windows-only` into `main`; (b) go-ahead to build Section 2, starting with the smallest slice
-   (Display density setting and the inline Details inspector, no live data); (c) where the webhook URL is stored, needed only before the webhook toggle is built.
+0. Owner decisions waiting (2026-11-03): (a) go-ahead to merge `feature/spec-modules-1-and-2-1-to-2-4` into `main` once its Windows CI is green; (b) what comes next: the UI and Tauri commands for what was built, the spec 1.2 acquisition investigation (SteamCMD/depot), or spec 2.5 onward; (c) the open items in decision 0007 (first real adapter and its risk-kind decision, connecting `trust::policy` to launch, which repository is the audio modder).
+   (The older items below are kept as history; the ones about `fix/section1-defects-windows-only`, Section 2 and the webhook URL were settled and merged earlier.)
 1. On Windows: `git checkout main`, `git pull`, `npm install`, `cargo test --workspace` (it runs more tests than the Linux container, because
    `tests/windows_system.rs` only runs on Windows), `npm run dev`; press "Scan for games", open a card's Compatibility, tick a box, and press
    Play on a Steam game; report what you see.

@@ -72,6 +72,16 @@ pub enum Error {
 
     #[error("invalid argument: {0}")]
     Invalid(String),
+
+    /// Not enough free space to copy something safely.
+    #[error(
+        "not enough free space at {path}: {needed} bytes needed (including a safety margin), {free} free"
+    )]
+    InsufficientSpace {
+        path: PathBuf,
+        needed: u64,
+        free: u64,
+    },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
