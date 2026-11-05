@@ -1,6 +1,6 @@
 # 0008 — UI and Tauri commands for Module 1 and items 2.1 to 2.4: the plan
 
-Status: plan, written before the code. Owner go-ahead 2026-11-04: "Proceed with building the UI components and Tauri IPC commands for
+Status: plan, written before the code; slice A built 2026-11-04 (see the end of this file). Owner go-ahead 2026-11-04: "Proceed with building the UI components and Tauri IPC commands for
 Modules 1.1 through 2.4", in the order that "gives us a complete, testable interface slice before tackling Module 2.5+".
 Work is on branch `feature/ui-modules-1-and-2-1-to-2-4`. **Nothing here merges into `main` without the owner's go-ahead.**
 
@@ -50,3 +50,25 @@ whole check suite, and Windows CI.
 
 Spec 2.5 and later, Module 3 onward, any real game adapter, acquisition of builds, and anything that needs a decision still open in
 0006 and 0007. If a slice cannot be finished it is reported as not finished, not shown as working.
+
+## Slice A, built 2026-11-04 (library folders and managed builds)
+
+What was built, as planned: `sul-core::manager::ManagerService`; nine commands (`manager_view`, `manager_add_root`, `manager_relink_root`,
+`manager_forget_root`, `manager_import_build`, `manager_register_in_place`, `manager_verify_build`, `manager_activate_build`,
+`manager_rollback_slot`); and the Folders and Builds panels on the Game Library page.
+
+Calls made while building it (all inside the plan; say so if any should change):
+
+- **A game's folder always comes from the library.** The page sends a game id; the command looks the game up and refuses an unknown game, or a
+  game the last scan did not find ("scan again before using its folder"). A typed source path is never accepted.
+- **Protection after a scan.** The library's install folders are protected at start-up and again after every scan, so a game found later is
+  protected before anything is built near it. To test this without Windows the scan command was split: `scan` finds the system scanner and
+  `scan_with` takes any scanner.
+- **One operation at a time on the page.** A second click while one runs is ignored (the backend would make it wait anyway), every button
+  is off while one runs, and the page says a copy cannot be cancelled once started and shows no progress.
+- **The question is not the check.** Copy, record in place and stop listing ask first. The core refuses unsafe requests whatever the page sends.
+- **A new line in the write-site list.** `crates/sul-core/tests/write_sites.rs` flagged the new IPC test file because it makes made-up folders in
+  a temporary folder; it is listed with that reason. No production file gained a way to change files.
+
+Still open from this slice: folders are typed, not picked (needs the dialog plugin and a permission, the owner's decision); no progress or
+cancel for a large copy (needs core changes); no repair or migrate button.

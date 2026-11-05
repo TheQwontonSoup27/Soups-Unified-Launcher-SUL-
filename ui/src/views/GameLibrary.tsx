@@ -3,7 +3,9 @@ import { MOCK_CAPABILITIES, STATUS_HELP, STATUS_ORDER, weakestStatus } from "../
 import { GameLibraryGrid } from "../components/GameLibraryGrid";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
+import { ManagedBuildsPanel } from "../components/ManagedBuildsPanel";
 import { LibraryController, filterGames, tauriLibraryApi, type LibraryApi } from "../lib/library";
+import type { ManagerApi } from "../lib/manager";
 import type { Status } from "../types";
 
 const PLANNED_GAMES = [...new Set(MOCK_CAPABILITIES.map((c) => c.game))];
@@ -16,9 +18,11 @@ function headline(game: string): Status {
 /**
  * `api` is the backend to use; `undefined` means the real one, `null` means none (a plain browser,
  * or a test), in which case the page explains that scanning needs the desktop app. `query` is what is
- * typed in the sidebar's search box: only the games that match it are shown.
+ * typed in the sidebar's search box: only the games that match it are shown. `managerApi` is the backend of the
+ * folders-and-builds panel; when a test hands the page a fake library backend and no manager backend, the panel
+ * gets none rather than reaching for the real one.
  */
-export default function GameLibrary({ api, query = "" }: { api?: LibraryApi | null; query?: string }) {
+export default function GameLibrary({ api, managerApi, query = "" }: { api?: LibraryApi | null; managerApi?: ManagerApi | null; query?: string }) {
   const controller = useMemo(() => new LibraryController(api === undefined ? tauriLibraryApi() : api), [api]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const searching = query.trim() !== "" && state.games.length > 0;
@@ -73,6 +77,8 @@ export default function GameLibrary({ api, query = "" }: { api?: LibraryApi | nu
       )}
 
       <GameLibraryGrid state={{ ...state, games: shown }} actions={controller} />
+
+      <ManagedBuildsPanel api={managerApi === undefined && api !== undefined ? null : managerApi} games={state.games} />
 
       <section className="card">
         <h3>Planned game adapters</h3>

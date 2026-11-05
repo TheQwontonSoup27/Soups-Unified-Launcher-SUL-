@@ -6,9 +6,15 @@
 //!
 //! Errors reach the webview as plain text, which the UI shows as is.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sul_core::manager::{
+    BuildSource, BuiltView, ManagerService, ManagerView, STATE_FOLDER, VerifiedView,
+};
+use sul_core::manifest::Variant;
+use sul_core::registry::{GameScanner, ScanOptions, system_scanner};
+use sul_core::roots::{DiskSpace, RootKind, SystemDiskSpace};
 use sul_core::service::{GameView, LibraryService, MatrixView, ScanView};
 use sul_core::steam::SteamManager;
 use tauri::State;
@@ -20,6 +26,8 @@ pub struct AppState {
     /// The library, or why it could not be opened. The app still starts without it, and each
     /// command then reports the reason instead of the whole app failing.
     library: Result<Arc<LibraryService>, String>,
+    /// Library folders and managed builds (spec Module 1), kept in `managed/` beside the library file.
+    manager: Result<Arc<ManagerService>, String>,
     steam: SteamManager,
 }
 
@@ -31,10 +39,79 @@ impl AppState {
 
     /// As [`open`](Self::open), with the given Steam manager (tests).
     pub fn with_steam(library_file: &Path, steam: SteamManager) -> Self {
+        Self::with_parts(library_file, steam, Box::new(SystemDiskSpace))
+    }
+
+    /// As [`with_steam`](Self::with_steam), with the given free-space reader (tests; the real one needs Windows).
+    pub fn with_parts(
+        library_file: &Path,
+        steam: SteamManager,
+        disk: Box<dyn DiskSpace + Send>,
+    ) -> Self {
         let library = LibraryService::open(library_file)
             .map(Arc::new)
             .map_err(|e| format!("the game library could not be opened: {e}"));
-        Self { library, steam }
+        let state_dir = library_file
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(STATE_FOLDER);
+        let manager = ManagerService::with_disk(&state_dir, disk)
+            .map(Arc::new)
+            .map_err(|e| format!("the build manager could not be opened: {e}"));
+        let state = Self {
+            library,
+            manager,
+            steam,
+        };
+        state.protect_library_installs();
+        state
+    }
+
+    fn manager(&self) -> Result<&ManagerService, String> {
+        self.manager.as_deref().map_err(Clone::clone)
+    }
+
+    /// Tell the build manager which folders the library lists as installs, so they are protected before
+    /// anything is read or written near them. Runs at start-up and after every scan.
+    fn protect_library_installs(&self) {
+        if let (Ok(library), Ok(manager)) = (self.library(), self.manager()) {
+            let dirs: Vec<PathBuf> = library
+                .games()
+                .iter()
+                .map(|g| PathBuf::from(&g.install_dir))
+                .collect();
+            let _ = manager.protect_installs(&dirs);
+        }
+    }
+
+    /// The folder and name of a game the last scan found: what an import or a register-in-place is given.
+    /// A game the last scan did not find is refused, because its folder may be gone or may now be something else.
+    fn build_source(
+        &self,
+        game_id: &str,
+        variant: Variant,
+        base_version: String,
+        source_description: String,
+    ) -> Result<BuildSource, String> {
+        let game = self
+            .games()?
+            .into_iter()
+            .find(|g| g.id == game_id)
+            .ok_or_else(|| format!("the library has no game {game_id:?}"))?;
+        if !game.present {
+            return Err(format!(
+                "the last scan did not find {}; scan again before using its folder",
+                game.name
+            ));
+        }
+        Ok(BuildSource {
+            game_id: game.id,
+            display_name: game.name,
+            install_dir: PathBuf::from(game.install_dir),
+            variant,
+            base_version,
+            source_description,
+        })
     }
 
     fn library(&self) -> Result<&LibraryService, String> {
@@ -46,7 +123,16 @@ impl AppState {
     }
 
     fn scan(&self) -> Result<ScanView, String> {
-        self.library()?.scan_system().map_err(|e| e.to_string())
+        let scanner = system_scanner(ScanOptions::default()).map_err(|e| e.to_string())?;
+        self.scan_with(scanner.as_ref())
+    }
+
+    /// Scan with `scanner`, then protect every install folder the library now lists (a game found by this scan
+    /// is protected before anything is built near it). The real scan is [`scan`](Self::scan); tests give their own.
+    pub(crate) fn scan_with(&self, scanner: &dyn GameScanner) -> Result<ScanView, String> {
+        let scan = self.library()?.scan(scanner).map_err(|e| e.to_string())?;
+        self.protect_library_installs();
+        Ok(scan)
     }
 
     fn matrix(&self, game_id: &str) -> Result<MatrixView, String> {
@@ -120,6 +206,146 @@ pub async fn update_feature_tick(
 pub async fn launch_game_command(app_id: u32, state: State<'_, AppState>) -> Result<(), String> {
     let app = state.inner().clone();
     blocking(move || app.launch(app_id)).await
+}
+
+// ---------------------------------------------------------------------------------------------
+// Module 1: library folders and managed builds (spec 1.2, 1.3, 1.5)
+// ---------------------------------------------------------------------------------------------
+
+/// The library folders, managed builds, active slots, old copies and operations that never finished.
+#[tauri::command]
+pub async fn manager_view(state: State<'_, AppState>) -> Result<ManagerView, String> {
+    state.manager()?.view().map_err(|e| e.to_string())
+}
+
+/// Register a folder as a library folder. `kind` is `builds` or `mods`. The folder must exist.
+#[tauri::command]
+pub async fn manager_add_root(
+    id: String,
+    label: String,
+    path: String,
+    kind: RootKind,
+    state: State<'_, AppState>,
+) -> Result<ManagerView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .add_root(&id, &label, Path::new(&path), kind)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Point a library folder at its place again after it moved. Only a folder with the right marker is accepted.
+#[tauri::command]
+pub async fn manager_relink_root(
+    id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<ManagerView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .relink_root(&id, Path::new(&path))
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Stop listing a library folder. Nothing in the folder is touched. Refused while a build is stored there.
+#[tauri::command]
+pub async fn manager_forget_root(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<ManagerView, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.forget_root(&id).map_err(|e| e.to_string())).await
+}
+
+/// Copy a library game's install into a library folder as a managed build. The original is only read.
+/// This can take a long time for a large game, and nothing reports progress while it runs.
+#[tauri::command]
+pub async fn manager_import_build(
+    game_id: String,
+    variant: Variant,
+    base_version: String,
+    source_description: String,
+    root_id: String,
+    state: State<'_, AppState>,
+) -> Result<BuiltView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        let source = app.build_source(&game_id, variant, base_version, source_description)?;
+        app.manager()?
+            .import_build(&source, &root_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Record a library game's install, where it is, as a read-only baseline. Nothing is copied or written.
+#[tauri::command]
+pub async fn manager_register_in_place(
+    game_id: String,
+    variant: Variant,
+    base_version: String,
+    source_description: String,
+    state: State<'_, AppState>,
+) -> Result<BuiltView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        let source = app.build_source(&game_id, variant, base_version, source_description)?;
+        app.manager()?
+            .register_in_place(&source)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Compare a build's files with its manifest. Changes nothing but the recorded result.
+#[tauri::command]
+pub async fn manager_verify_build(
+    build_id: String,
+    state: State<'_, AppState>,
+) -> Result<VerifiedView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .verify_build(&build_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Make a build the active one of its slot. It is verified first and must match its manifest.
+#[tauri::command]
+pub async fn manager_activate_build(
+    build_id: String,
+    state: State<'_, AppState>,
+) -> Result<ManagerView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .activate_build(&build_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Return a slot to the most recent earlier build that still verifies.
+#[tauri::command]
+pub async fn manager_rollback_slot(
+    game_id: String,
+    slot: String,
+    state: State<'_, AppState>,
+) -> Result<ManagerView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .rollback_slot(&game_id, &slot)
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -201,8 +427,10 @@ mod tests {
     fn a_library_that_cannot_open_is_reported_by_every_command_not_a_crash() {
         let dir = tempfile::tempdir().unwrap();
         // A folder where the library file should be: it can be neither read nor replaced as a file.
+        let library_file = dir.path().join("library.json");
+        std::fs::create_dir(&library_file).unwrap();
         let state = AppState::with_steam(
-            dir.path(),
+            &library_file,
             SteamManager::with_parts(Box::new(Closed), Box::new(Opened::default())),
         );
         for error in [

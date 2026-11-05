@@ -130,6 +130,15 @@ fn handlers<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         commands::get_game_matrix,
         commands::update_feature_tick,
         commands::launch_game_command,
+        commands::manager_view,
+        commands::manager_add_root,
+        commands::manager_relink_root,
+        commands::manager_forget_root,
+        commands::manager_import_build,
+        commands::manager_register_in_place,
+        commands::manager_verify_build,
+        commands::manager_activate_build,
+        commands::manager_rollback_slot,
     ]
 }
 

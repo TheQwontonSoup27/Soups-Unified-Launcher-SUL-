@@ -80,6 +80,16 @@ export async function type(input: HTMLInputElement, value: string): Promise<void
   });
 }
 
+/** Pick an option of a controlled `<select>` the way a user does (React listens for the native `change` event). */
+export async function choose(select: HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, "value")?.set;
+    if (!setter) throw new Error("no value setter on HTMLSelectElement");
+    setter.call(select, value);
+    select.dispatchEvent(new window.Event("change", { bubbles: true }));
+  });
+}
+
 export async function submit(form: HTMLFormElement): Promise<void> {
   await act(async () => {
     form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
