@@ -7,7 +7,7 @@ Early development. Read `PROJECT_SPEC.md` (requirements), `CLAUDE.md` (engineeri
 - `crates/sul-core`: Rust core (game scanner, compatibility matrix, storage, updater, safe file operations, manifests, Discord presence).
 - `src-tauri`: desktop container; thin commands over `sul-core`.
 - `ui`: React shell (Vite).
-- `docs/`: setup, decisions, capability matrix, design references.
+- `docs/`: setup, decisions, capability matrix, design references, and `docs/references.md` (every link and named source, with its status).
 
 ## Commands
 ```
