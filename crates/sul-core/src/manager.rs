@@ -22,6 +22,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 
+use crate::adapters::AdapterRegistry;
 use crate::builds::{
     ActiveSlot, BuildCheck, BuildRecord, BuildRegistry, Ctx, ImportRequest, RegisterRequest,
     RetiredCopy,
@@ -29,8 +30,13 @@ use crate::builds::{
 use crate::fsops::ProtectedRoots;
 use crate::journal::Journal;
 use crate::manifest::Variant;
+use crate::mods::profile::Profiles;
+use crate::mods::store::ModStore;
 use crate::roots::{DiskSpace, LibraryRoots, Root, RootKind, SystemDiskSpace};
 use crate::{Error, Result};
+
+mod modding;
+pub use modding::*;
 
 /// The folder (beside the library file) that holds this service's state.
 pub const STATE_FOLDER: &str = "managed";
@@ -107,6 +113,9 @@ struct Inner {
     journal: Journal,
     builds: BuildRegistry,
     disk: Box<dyn DiskSpace + Send>,
+    store: ModStore,
+    profiles: Profiles,
+    adapters: AdapterRegistry,
 }
 
 pub struct ManagerService {
@@ -114,15 +123,26 @@ pub struct ManagerService {
 }
 
 impl ManagerService {
-    /// Open the service with its state in `dir` (`roots.json`, `builds.json` and `journal.jsonl`), reading the
-    /// free space of the real disks. A missing file is an empty list; a file that cannot be read is an error and
-    /// is never replaced.
+    /// Open the service with its state in `dir` (`roots.json`, `builds.json`, `mods.json`, `profiles.json` and
+    /// `journal.jsonl`), reading the free space of the real disks. A missing file is an empty list; a file that
+    /// cannot be read is an error and is never replaced. No game adapter is registered: no adapter for a real
+    /// game exists yet, so nothing can be deployed (see [`with_parts`](Self::with_parts)).
     pub fn open(dir: &Path) -> Result<Self> {
         Self::with_disk(dir, Box::new(SystemDiskSpace))
     }
 
     /// As [`open`](Self::open) with the given disk-space reader (tests).
     pub fn with_disk(dir: &Path, disk: Box<dyn DiskSpace + Send>) -> Result<Self> {
+        Self::with_parts(dir, disk, AdapterRegistry::new())
+    }
+
+    /// As [`open`](Self::open) with a disk-space reader and the game adapters this build of SUL knows. A game with
+    /// no adapter has no mod layout, and a mod is never deployed into a game without one.
+    pub fn with_parts(
+        dir: &Path,
+        disk: Box<dyn DiskSpace + Send>,
+        adapters: AdapterRegistry,
+    ) -> Result<Self> {
         Ok(Self {
             inner: Mutex::new(Inner {
                 roots: LibraryRoots::load(&dir.join("roots.json"))?,
@@ -131,6 +151,9 @@ impl ManagerService {
                 journal: Journal::open(&dir.join("journal.jsonl"))?,
                 builds: BuildRegistry::open(&dir.join("builds.json"))?,
                 disk,
+                store: ModStore::open(&dir.join("mods.json"))?,
+                profiles: Profiles::open(&dir.join("profiles.json"))?,
+                adapters,
             }),
         })
     }
@@ -349,10 +372,10 @@ fn protect(g: &mut Inner, dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn view_of(g: &Inner) -> Result<ManagerView> {
+/// Every library root with what can be seen of it right now.
+fn root_views(g: &Inner) -> Vec<RootView> {
     let status = g.roots.status(&*g.disk);
-    let roots = g
-        .roots
+    g.roots
         .roots()
         .iter()
         .map(|r| {
@@ -364,7 +387,11 @@ fn view_of(g: &Inner) -> Result<ManagerView> {
                 free_bytes: s.and_then(|s| s.free_bytes),
             }
         })
-        .collect();
+        .collect()
+}
+
+fn view_of(g: &Inner) -> Result<ManagerView> {
+    let roots = root_views(g);
     let slots = g_slots(g);
     let builds = g
         .builds

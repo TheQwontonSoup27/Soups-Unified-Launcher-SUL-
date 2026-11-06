@@ -17,6 +17,8 @@ use tauri::test::{
 };
 use tauri::webview::InvokeRequest;
 
+use sul_core::adapters::{AdapterRegistry, GameAdapter, LaunchPlan, ModLayout, Recognition};
+use sul_core::capability::CapabilityEntry;
 use sul_core::roots::DiskSpace;
 
 use crate::{DiscordState, commands::AppState, handlers};
@@ -84,6 +86,15 @@ fn shell(games: Vec<InstalledGame>) -> Shell {
 
 /// As [`shell`], with the library kept in `dir` (so a test can make real folders beside it first).
 fn shell_in(dir: tempfile::TempDir, games: Vec<InstalledGame>) -> Shell {
+    shell_with(dir, games, AdapterRegistry::new())
+}
+
+/// As [`shell_in`], with game adapters registered. The real app registers none.
+fn shell_with(
+    dir: tempfile::TempDir,
+    games: Vec<InstalledGame>,
+    adapters: AdapterRegistry,
+) -> Shell {
     let file = dir.path().join("library.json");
     if !games.is_empty() {
         LibraryService::open(&file)
@@ -95,7 +106,12 @@ fn shell_in(dir: tempfile::TempDir, games: Vec<InstalledGame>) -> Shell {
     let steam = SteamManager::with_parts(Box::new(SteamClosed), Box::new(opened.clone()));
     let app = mock_builder()
         .manage(DiscordState::default())
-        .manage(AppState::with_parts(&file, steam, Box::new(Plenty)))
+        .manage(AppState::with_parts(
+            &file,
+            steam,
+            Box::new(Plenty),
+            adapters,
+        ))
         .invoke_handler(handlers())
         .build(mock_context(noop_assets()))
         .expect("the mock app builds");
@@ -189,6 +205,29 @@ fn every_command_the_page_knows_is_reachable() {
             "manager_rollback_slot",
             json!({ "gameId": "x", "slot": "original" }),
         ),
+        ("mods_view", json!({})),
+        (
+            "mods_import",
+            json!({ "source": { "game_id": "x", "mod_id": "m", "name": "M", "version": "1", "path": "/nope" }, "rootId": "x" }),
+        ),
+        (
+            "mods_verify",
+            json!({ "gameId": "x", "modId": "m", "version": "1" }),
+        ),
+        (
+            "mods_create_profile",
+            json!({ "id": "p", "name": "P", "gameId": "x", "buildId": "b" }),
+        ),
+        (
+            "mods_edit_profile",
+            json!({ "profileId": "p", "edit": { "action": "rename", "name": "Q" } }),
+        ),
+        ("mods_plan_deploy", json!({ "profileId": "p" })),
+        ("mods_deploy", json!({ "profileId": "p" })),
+        ("mods_plan_purge", json!({ "buildId": "b" })),
+        ("mods_purge", json!({ "buildId": "b" })),
+        ("mods_undo_purge", json!({ "buildId": "b", "purgeId": "x" })),
+        ("mods_purge_and_deploy", json!({ "profileId": "p" })),
     ] {
         // Whatever the answer is, it must not be Tauri's "not registered" refusal.
         let answer = format!("{:?}", shell.call(cmd, args));
@@ -483,6 +522,13 @@ fn presence_without_an_application_id_explains_what_is_missing_and_connects_to_n
 
 /// A library whose one game lives in a real folder under `dir`, scanned once so the library lists it.
 fn real_game_shell(also_missing: bool) -> (Shell, PathBuf, PathBuf) {
+    real_game_shell_with(also_missing, AdapterRegistry::new())
+}
+
+fn real_game_shell_with(
+    also_missing: bool,
+    adapters: AdapterRegistry,
+) -> (Shell, PathBuf, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let base = dir.path().canonicalize().unwrap();
     let install = base.join("Games").join("Made-up Game");
@@ -503,7 +549,7 @@ fn real_game_shell(also_missing: bool) -> (Shell, PathBuf, PathBuf) {
             .unwrap();
     }
     service.scan(&Found(vec![here])).unwrap();
-    (shell_in(dir, vec![]), install, store)
+    (shell_with(dir, vec![], adapters), install, store)
 }
 
 #[test]
@@ -863,4 +909,437 @@ fn a_game_found_by_a_scan_is_protected_at_once_so_a_root_inside_it_is_refused() 
         "{refusal}"
     );
     assert!(!install.join("data/.sul-root.json").exists());
+}
+
+// ---- Mods (spec 2.1) ----
+
+/// A made-up adapter for the made-up game of `real_game_shell`. It is not a real game's adapter.
+struct TinyAdapter;
+
+impl GameAdapter for TinyAdapter {
+    fn id(&self) -> &str {
+        "gog-1"
+    }
+    fn display_name(&self) -> &str {
+        "Made-up Game"
+    }
+    fn version(&self) -> &str {
+        "0.0-test"
+    }
+    fn recognise(&self, _folder: &std::path::Path) -> sul_core::Result<Recognition> {
+        Ok(Recognition::not_this_game(
+            "a test adapter recognises nothing",
+        ))
+    }
+    fn launch_plan(&self, _dir: &std::path::Path, _v: &str) -> sul_core::Result<LaunchPlan> {
+        Err(sul_core::Error::Invalid(
+            "a test adapter does not launch".into(),
+        ))
+    }
+    fn mod_layout(&self) -> ModLayout {
+        ModLayout {
+            allowed_prefixes: vec!["data".into(), "mods".into()],
+            forbidden_prefixes: vec!["data/anticheat".into()],
+            case_insensitive: true,
+        }
+    }
+    fn capabilities(&self) -> Vec<CapabilityEntry> {
+        vec![]
+    }
+}
+
+fn tiny_adapters() -> AdapterRegistry {
+    let mut a = AdapterRegistry::new();
+    a.register(Box::new(TinyAdapter)).unwrap();
+    a
+}
+
+/// A shell with a build folder, a mod folder, an experimental build of the made-up game and a mod folder on disk.
+/// Returns the shell, the original install, the build's id and the folder the mod came from.
+fn mods_shell(adapters: AdapterRegistry) -> (Shell, PathBuf, String, PathBuf) {
+    let (shell, install, store) = real_game_shell_with(false, adapters);
+    let base = store.parent().unwrap().to_path_buf();
+    let modlib = base.join("modlib");
+    std::fs::create_dir_all(&modlib).unwrap();
+    for (id, label, path, kind) in [
+        ("ssd", "Fast drive", &store, "builds"),
+        ("modlib", "Mod library", &modlib, "mods"),
+    ] {
+        shell
+            .call(
+                "manager_add_root",
+                json!({ "id": id, "label": label, "path": path.to_str().unwrap(), "kind": kind }),
+            )
+            .unwrap();
+    }
+    let built = shell
+        .call(
+            "manager_import_build",
+            json!({ "gameId": "gog-1", "variant": "experimental", "baseVersion": "1.0.0",
+                    "sourceDescription": "my own install", "rootId": "ssd" }),
+        )
+        .unwrap();
+    let build = built["build_id"].as_str().unwrap().to_owned();
+    let src = base.join("mod_src");
+    std::fs::create_dir_all(src.join("data")).unwrap();
+    std::fs::create_dir_all(src.join("mods")).unwrap();
+    std::fs::write(src.join("data/a.bin"), "NEW-A").unwrap();
+    std::fs::write(src.join("mods/ui.txt"), "ui").unwrap();
+    (shell, install, build, src)
+}
+
+fn import_mod_and_make_profile(shell: &Shell, build: &str, src: &std::path::Path) -> Value {
+    shell
+        .call(
+            "mods_import",
+            json!({ "source": { "game_id": "gog-1", "mod_id": "ui", "name": "UI mod", "version": "1.0",
+                                "requires": [], "compatible_versions": ["1.0.0"],
+                                "source": "made by hand", "license_note": "mine",
+                                "path": src.to_str().unwrap() },
+                    "rootId": "modlib" }),
+        )
+        .unwrap();
+    shell
+        .call(
+            "mods_create_profile",
+            json!({ "id": "main", "name": "Main", "gameId": "gog-1", "buildId": build }),
+        )
+        .unwrap();
+    shell
+        .call(
+            "mods_edit_profile",
+            json!({ "profileId": "main",
+                    "edit": { "action": "add_mod", "mod_id": "ui", "version": "1.0", "position": null } }),
+        )
+        .unwrap()
+}
+
+fn managed_file(shell: &Shell, build: &str, rel: &str) -> PathBuf {
+    // The build's folder is the one inside the build library that holds the made-up game's executable.
+    let view = shell.call("manager_view", json!({})).unwrap();
+    let rec = view["builds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["id"] == build)
+        .unwrap();
+    let root = &rec["location"]["root_id"];
+    let roots = view["roots"].as_array().unwrap();
+    let root_path = roots.iter().find(|r| &r["id"] == root).unwrap()["path"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    PathBuf::from(root_path)
+        .join(rec["location"]["dir"].as_str().unwrap())
+        .join(rel)
+}
+
+#[test]
+fn the_mods_view_has_exactly_the_fields_the_page_reads() {
+    let view = shell(vec![]).call("mods_view", json!({})).unwrap();
+    assert_eq!(
+        keys(&view),
+        [
+            "builds",
+            "deployable_games",
+            "mod_roots",
+            "mods",
+            "profiles"
+        ]
+    );
+    for k in [
+        "builds",
+        "deployable_games",
+        "mod_roots",
+        "mods",
+        "profiles",
+    ] {
+        assert_eq!(view[k], json!([]), "{k}");
+    }
+}
+
+#[test]
+fn a_mod_is_imported_put_in_a_profile_deployed_purged_and_undone_through_the_commands() {
+    let (shell, install, build, src) = mods_shell(tiny_adapters());
+    let view = import_mod_and_make_profile(&shell, &build, &src);
+
+    assert_eq!(view["deployable_games"], json!(["gog-1"]));
+    let m = &view["mods"][0];
+    assert_eq!(
+        keys(m),
+        [
+            "compatible_versions",
+            "file_count",
+            "game_id",
+            "imported_unix",
+            "license_note",
+            "mod_id",
+            "name",
+            "requires",
+            "root_id",
+            "source",
+            "total_bytes",
+            "version"
+        ]
+    );
+    assert_eq!(
+        (m["file_count"].as_u64(), m["total_bytes"].as_u64()),
+        (Some(2), Some(7))
+    );
+    let p = &view["profiles"][0];
+    assert_eq!(
+        keys(p),
+        [
+            "build_id",
+            "config",
+            "created_unix",
+            "game_id",
+            "id",
+            "mods",
+            "name",
+            "notes",
+            "problems",
+            "updated_unix"
+        ]
+    );
+    assert_eq!(keys(&p["mods"][0]), ["enabled", "mod_id", "version"]);
+    assert_eq!(
+        keys(&view["mod_roots"][0]),
+        [
+            "free_bytes",
+            "id",
+            "kind",
+            "label",
+            "marker_ok",
+            "path",
+            "present"
+        ]
+    );
+    assert_eq!(
+        keys(&view["builds"][0]),
+        [
+            "build_id",
+            "deployment",
+            "error",
+            "game_id",
+            "history",
+            "slot",
+            "undoable_purge"
+        ]
+    );
+    assert_eq!(
+        view["builds"][0]["slot"], "experimental",
+        "the page names a build by its slot"
+    );
+
+    let a_bin = managed_file(&shell, &build, "data/a.bin");
+    let checked = shell
+        .call(
+            "mods_verify",
+            json!({ "gameId": "gog-1", "modId": "ui", "version": "1.0" }),
+        )
+        .unwrap();
+    assert_eq!(keys(&checked), ["report", "view"]);
+    assert_eq!(keys(&checked["report"]), ["extra", "missing", "modified"]);
+
+    // The preview.
+    let plan = shell
+        .call("mods_plan_deploy", json!({ "profileId": "main" }))
+        .unwrap();
+    assert_eq!(
+        keys(&plan),
+        ["build_id", "files", "problems", "profile_id", "total_bytes"]
+    );
+    assert_eq!(plan["problems"], json!([]));
+    assert_eq!(
+        keys(&plan["files"][0]),
+        [
+            "action",
+            "mod_id",
+            "mod_version",
+            "overrides",
+            "path",
+            "replaces",
+            "sha256",
+            "size"
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(&a_bin).unwrap(),
+        "AAAA",
+        "a preview changes nothing"
+    );
+
+    // The deploy.
+    let deployed = shell
+        .call("mods_deploy", json!({ "profileId": "main" }))
+        .unwrap();
+    assert_eq!(keys(&deployed), ["report", "view"]);
+    assert_eq!(
+        keys(&deployed["report"]),
+        ["added", "deployment_id", "kept", "replaced", "warnings"]
+    );
+    assert_eq!(deployed["report"]["replaced"], json!(["data/a.bin"]));
+    assert_eq!(std::fs::read_to_string(&a_bin).unwrap(), "NEW-A");
+    let dep = &deployed["view"]["builds"][0]["deployment"];
+    assert_eq!(
+        keys(dep),
+        [
+            "files",
+            "finished_unix",
+            "id",
+            "profile_id",
+            "profile_name",
+            "started_unix",
+            "status"
+        ]
+    );
+    assert_eq!(dep["status"], "deployed");
+
+    // The purge preview, then the purge.
+    let pp = shell
+        .call("mods_plan_purge", json!({ "buildId": build }))
+        .unwrap();
+    assert_eq!(keys(&pp), ["build_id", "deployment", "items"]);
+    assert_eq!(
+        keys(&pp["items"][0]),
+        ["action", "detail", "mod_id", "path"]
+    );
+    assert_eq!(std::fs::read_to_string(&a_bin).unwrap(), "NEW-A");
+    let purged = shell
+        .call("mods_purge", json!({ "buildId": build }))
+        .unwrap();
+    assert_eq!(
+        keys(&purged["report"]),
+        [
+            "forgotten",
+            "left",
+            "purge_id",
+            "recovery_dir",
+            "removed",
+            "restored"
+        ]
+    );
+    assert_eq!(std::fs::read_to_string(&a_bin).unwrap(), "AAAA");
+    let undoable = &purged["view"]["builds"][0]["undoable_purge"];
+    assert_eq!(keys(undoable), ["files", "id", "profile_name", "unix"]);
+
+    // The undo.
+    let purge_id = purged["report"]["purge_id"].as_str().unwrap().to_owned();
+    let undone = shell
+        .call(
+            "mods_undo_purge",
+            json!({ "buildId": build, "purgeId": purge_id }),
+        )
+        .unwrap();
+    assert_eq!(
+        keys(&undone["report"]),
+        ["originals_moved_aside_again", "put_back"]
+    );
+    assert_eq!(std::fs::read_to_string(&a_bin).unwrap(), "NEW-A");
+
+    // Purge & Deploy.
+    let both = shell
+        .call("mods_purge_and_deploy", json!({ "profileId": "main" }))
+        .unwrap();
+    assert_eq!(keys(&both["report"]), ["deploy", "purge"]);
+    assert_eq!(std::fs::read_to_string(&a_bin).unwrap(), "NEW-A");
+
+    assert_eq!(
+        std::fs::read_to_string(install.join("data/a.bin")).unwrap(),
+        "AAAA",
+        "the original install is never changed"
+    );
+}
+
+#[test]
+fn with_no_adapter_nothing_is_deployed_and_the_refusal_says_why() {
+    let (shell, _install, build, src) = mods_shell(AdapterRegistry::new());
+    let view = import_mod_and_make_profile(&shell, &build, &src);
+    assert_eq!(view["deployable_games"], json!([]));
+    for cmd in ["mods_plan_deploy", "mods_deploy", "mods_purge_and_deploy"] {
+        let e = shell.call(cmd, json!({ "profileId": "main" })).unwrap_err();
+        assert!(e.as_str().unwrap().contains("no adapter"), "{cmd}: {e}");
+    }
+    let a_bin = managed_file(&shell, &build, "data/a.bin");
+    assert_eq!(std::fs::read_to_string(a_bin).unwrap(), "AAAA");
+}
+
+#[test]
+fn profile_edits_use_a_tagged_object_and_refusals_reach_the_page_as_text() {
+    let (shell, _install, build, src) = mods_shell(tiny_adapters());
+    import_mod_and_make_profile(&shell, &build, &src);
+    for (edit, expect) in [
+        (
+            json!({ "action": "set_enabled", "mod_id": "ui", "enabled": false }),
+            None,
+        ),
+        (
+            json!({ "action": "move", "mod_id": "ui", "to_index": 0 }),
+            None,
+        ),
+        (
+            json!({ "action": "set_config", "key": "volume", "value": "3" }),
+            None,
+        ),
+        (
+            json!({ "action": "set_config", "key": "volume", "value": null }),
+            None,
+        ),
+        (json!({ "action": "notes", "notes": "hello" }), None),
+        (
+            json!({ "action": "remove_mod", "mod_id": "ghost" }),
+            Some("not in this profile"),
+        ),
+    ] {
+        let r = shell.call(
+            "mods_edit_profile",
+            json!({ "profileId": "main", "edit": edit }),
+        );
+        match expect {
+            None => {
+                r.unwrap();
+            }
+            Some(text) => assert!(r.unwrap_err().as_str().unwrap().contains(text)),
+        }
+    }
+    // An unknown action, and arguments spelled in snake case, are refused.
+    assert!(
+        shell
+            .call(
+                "mods_edit_profile",
+                json!({ "profileId": "main", "edit": { "action": "explode" } })
+            )
+            .is_err()
+    );
+    assert!(
+        shell
+            .call("mods_deploy", json!({ "profile_id": "main" }))
+            .is_err()
+    );
+    let e = shell
+        .call(
+            "mods_import",
+            json!({ "source": { "game_id": "gog-1" }, "rootId": "modlib" }),
+        )
+        .unwrap_err();
+    assert!(e.is_string(), "{e}");
+}
+
+#[test]
+fn a_mod_import_from_a_folder_that_is_not_there_is_refused_as_text_and_adds_nothing() {
+    let (shell, _install, _build, src) = mods_shell(tiny_adapters());
+    let e = shell
+        .call(
+            "mods_import",
+            json!({ "source": { "game_id": "gog-1", "mod_id": "ui", "name": "UI", "version": "1.0",
+                                "path": src.join("nope").to_str().unwrap() },
+                    "rootId": "modlib" }),
+        )
+        .unwrap_err();
+    assert!(e.is_string(), "{e}");
+    assert_eq!(
+        shell.call("mods_view", json!({})).unwrap()["mods"],
+        json!([])
+    );
 }

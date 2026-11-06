@@ -153,7 +153,7 @@ pub trait GameAdapter {
 /// refused when it is registered, not when it is used.
 #[derive(Default)]
 pub struct AdapterRegistry {
-    adapters: Vec<Box<dyn GameAdapter>>,
+    adapters: Vec<Box<dyn GameAdapter + Send>>,
 }
 
 impl AdapterRegistry {
@@ -161,7 +161,7 @@ impl AdapterRegistry {
         Self::default()
     }
 
-    pub fn register(&mut self, adapter: Box<dyn GameAdapter>) -> Result<()> {
+    pub fn register(&mut self, adapter: Box<dyn GameAdapter + Send>) -> Result<()> {
         validate_game_id(adapter.id())?;
         if adapter.display_name().trim().is_empty() || adapter.version().trim().is_empty() {
             return Err(Error::Invalid(format!(
@@ -194,7 +194,7 @@ impl AdapterRegistry {
         self.adapters
             .iter()
             .find(|a| a.id() == game_id)
-            .map(|a| a.as_ref())
+            .map(|a| -> &dyn GameAdapter { a.as_ref() })
     }
 
     pub fn ids(&self) -> Vec<&str> {

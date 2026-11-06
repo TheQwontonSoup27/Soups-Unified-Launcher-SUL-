@@ -9,10 +9,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sul_core::adapters::AdapterRegistry;
 use sul_core::manager::{
-    BuildSource, BuiltView, ManagerService, ManagerView, STATE_FOLDER, VerifiedView,
+    BuildSource, BuiltView, Deployed, ManagerService, ManagerView, ModSource, ModVerified,
+    ModsView, ProfileEdit, Purged, PurgedAndDeployed, STATE_FOLDER, Undone, VerifiedView,
 };
 use sul_core::manifest::Variant;
+use sul_core::mods::deploy::{DeployPlan, PurgePlan};
 use sul_core::registry::{GameScanner, ScanOptions, system_scanner};
 use sul_core::roots::{DiskSpace, RootKind, SystemDiskSpace};
 use sul_core::service::{GameView, LibraryService, MatrixView, ScanView};
@@ -39,14 +42,22 @@ impl AppState {
 
     /// As [`open`](Self::open), with the given Steam manager (tests).
     pub fn with_steam(library_file: &Path, steam: SteamManager) -> Self {
-        Self::with_parts(library_file, steam, Box::new(SystemDiskSpace))
+        Self::with_parts(
+            library_file,
+            steam,
+            Box::new(SystemDiskSpace),
+            AdapterRegistry::new(),
+        )
     }
 
-    /// As [`with_steam`](Self::with_steam), with the given free-space reader (tests; the real one needs Windows).
+    /// As [`with_steam`](Self::with_steam), with the given free-space reader (tests; the real one needs Windows)
+    /// and the game adapters this build knows. The app registers none: no adapter for a real game exists yet, so
+    /// no mod is deployed for any game.
     pub fn with_parts(
         library_file: &Path,
         steam: SteamManager,
         disk: Box<dyn DiskSpace + Send>,
+        adapters: AdapterRegistry,
     ) -> Self {
         let library = LibraryService::open(library_file)
             .map(Arc::new)
@@ -55,7 +66,7 @@ impl AppState {
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join(STATE_FOLDER);
-        let manager = ManagerService::with_disk(&state_dir, disk)
+        let manager = ManagerService::with_parts(&state_dir, disk, adapters)
             .map(Arc::new)
             .map_err(|e| format!("the build manager could not be opened: {e}"));
         let state = Self {
@@ -343,6 +354,165 @@ pub async fn manager_rollback_slot(
     blocking(move || {
         app.manager()?
             .rollback_slot(&game_id, &slot)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+// ---- Mods (spec 2.1) ----
+
+/// The mod store, the profiles, and the mod state of every managed build.
+#[tauri::command]
+pub async fn mods_view(state: State<'_, AppState>) -> Result<ModsView, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.mods_view().map_err(|e| e.to_string())).await
+}
+
+/// Copy a mod folder into a mod library folder as a verified copy. The folder is only read.
+#[tauri::command]
+pub async fn mods_import(
+    source: ModSource,
+    root_id: String,
+    state: State<'_, AppState>,
+) -> Result<ModsView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .import_mod(&source, &root_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Compare a stored mod with its own inventory. Reads only.
+#[tauri::command]
+pub async fn mods_verify(
+    game_id: String,
+    mod_id: String,
+    version: String,
+    state: State<'_, AppState>,
+) -> Result<ModVerified, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .verify_mod(&game_id, &mod_id, &version)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Make a profile for one game and one of its builds. It edits SUL's profile file and nothing else.
+#[tauri::command]
+pub async fn mods_create_profile(
+    id: String,
+    name: String,
+    game_id: String,
+    build_id: String,
+    state: State<'_, AppState>,
+) -> Result<ModsView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .create_profile(&id, &name, &game_id, &build_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Change one profile. Nothing is deployed or purged and no game file is touched.
+#[tauri::command]
+pub async fn mods_edit_profile(
+    profile_id: String,
+    edit: ProfileEdit,
+    state: State<'_, AppState>,
+) -> Result<ModsView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .edit_profile(&profile_id, &edit)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// The dry run of a deploy. Changes nothing.
+#[tauri::command]
+pub async fn mods_plan_deploy(
+    profile_id: String,
+    state: State<'_, AppState>,
+) -> Result<DeployPlan, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .plan_deploy(&profile_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Put the enabled mods of a profile into its build. The core plans again first and refuses a blocked plan.
+#[tauri::command]
+pub async fn mods_deploy(
+    profile_id: String,
+    state: State<'_, AppState>,
+) -> Result<Deployed, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .deploy(&profile_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// The dry run of a purge. Changes nothing.
+#[tauri::command]
+pub async fn mods_plan_purge(
+    build_id: String,
+    state: State<'_, AppState>,
+) -> Result<PurgePlan, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .plan_purge(&build_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Take what is deployed out of a build, touching only what the ownership ledger proves SUL put there.
+#[tauri::command]
+pub async fn mods_purge(build_id: String, state: State<'_, AppState>) -> Result<Purged, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.purge(&build_id).map_err(|e| e.to_string())).await
+}
+
+/// Put back what the latest purge took out.
+#[tauri::command]
+pub async fn mods_undo_purge(
+    build_id: String,
+    purge_id: String,
+    state: State<'_, AppState>,
+) -> Result<Undone, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .undo_purge(&build_id, &purge_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Purge what is deployed in the profile's build, then deploy the profile.
+#[tauri::command]
+pub async fn mods_purge_and_deploy(
+    profile_id: String,
+    state: State<'_, AppState>,
+) -> Result<PurgedAndDeployed, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .purge_and_deploy(&profile_id)
             .map_err(|e| e.to_string())
     })
     .await

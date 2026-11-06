@@ -138,3 +138,10 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .managed .field input[type=text] { min-width:200px; }
 .managed select { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; min-width:160px; }
 .managed h4 { margin:14px 0 4px; }
+.managed textarea { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; min-width:260px; font:inherit; }
+.managed .profile { border-top:1px solid var(--border); padding-top:8px; margin-top:12px; }
+.managed .profile h4 { margin:6px 0 0; }
+.managed details { margin-top:8px; }
+.preview-list { list-style:none; margin:8px 0; padding:0; max-height:260px; overflow:auto; font-size:13px; }
+.preview-list li { padding:3px 0; overflow-wrap:anywhere; }
+.preview-list .left-alone { font-weight:700; }

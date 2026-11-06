@@ -139,6 +139,17 @@ fn handlers<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         commands::manager_verify_build,
         commands::manager_activate_build,
         commands::manager_rollback_slot,
+        commands::mods_view,
+        commands::mods_import,
+        commands::mods_verify,
+        commands::mods_create_profile,
+        commands::mods_edit_profile,
+        commands::mods_plan_deploy,
+        commands::mods_deploy,
+        commands::mods_plan_purge,
+        commands::mods_purge,
+        commands::mods_undo_purge,
+        commands::mods_purge_and_deploy,
     ]
 }
 

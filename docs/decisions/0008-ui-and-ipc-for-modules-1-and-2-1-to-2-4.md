@@ -1,6 +1,6 @@
 # 0008 — UI and Tauri commands for Module 1 and items 2.1 to 2.4: the plan
 
-Status: plan, written before the code; slice A built 2026-11-04 (see the end of this file). Owner go-ahead 2026-11-04: "Proceed with building the UI components and Tauri IPC commands for
+Status: plan, written before the code; slice A built 2026-11-04 and slice B built 2026-11-06 (see the end of this file). Owner go-ahead 2026-11-04: "Proceed with building the UI components and Tauri IPC commands for
 Modules 1.1 through 2.4", in the order that "gives us a complete, testable interface slice before tackling Module 2.5+".
 Work is on branch `feature/ui-modules-1-and-2-1-to-2-4`. **Nothing here merges into `main` without the owner's go-ahead.**
 
@@ -72,3 +72,29 @@ Calls made while building it (all inside the plan; say so if any should change):
 
 Still open from this slice: folders are typed, not picked (needs the dialog plugin and a permission, the owner's decision); no progress or
 cancel for a large copy (needs core changes); no repair or migrate button.
+
+## Slice B, built 2026-11-06 (mods, profiles, deploy, purge, undo)
+
+What was built, as planned: the mod half of `ManagerService` (`manager/modding.rs`); eleven commands (`mods_view`, `mods_import`, `mods_verify`,
+`mods_create_profile`, `mods_edit_profile`, `mods_plan_deploy`, `mods_deploy`, `mods_plan_purge`, `mods_purge`, `mods_undo_purge`,
+`mods_purge_and_deploy`); and the Mods & Mod Builder page.
+
+Calls made while building it (all inside the plan; say so if any should change):
+
+- **The service owns the adapters.** `AdapterRegistry` now holds `GameAdapter + Send` adapters so it can live behind the service's one lock. A game
+  with no adapter has no mod layout, so a preview, a deploy and Purge & Deploy are refused for it; a purge and an undo are ledger-based and need no
+  adapter. No adapter for a real game exists, so in the app every deploy is refused today, and the page says so.
+- **A previewed deploy is never trusted.** The page shows a preview and asks, but the core plans the deploy again when it runs and refuses anything
+  unsafe or changed, whatever the page sends. A blocked plan cannot be confirmed on the page either.
+- **Profiles may move builds only while not deployed.** A profile deployed in its build cannot be moved to another build until it is purged there,
+  and it can only move to a build of its own game. (Related to the owner's 2026-11-04 answer that a build with mods deployed stays locked against moving until a purge; that answer is about builds, this rule is about profiles, so say if it should work differently.)
+- **The "add to profile" picker offers the most recently imported version of each mod**, not the highest version number; the version is shown, and it
+  can be changed on the profile afterwards.
+- **The notes a person writes about a mod** (source, licence, game versions) are shown as their words and are not checked.
+- **Mod layouts are validated at use, not only at registration.** The registry already refuses an invalid layout when an adapter is registered; the
+  service checks again before every preview and deploy, so an adapter whose layout changes later is still stopped. A test with an adapter that turns
+  invalid after registration covers it.
+
+Still open from this slice: no real adapter (so deploying has never been tried on a real game); no conflict analysis; no way to choose which files
+of a mod to deploy; no progress or cancel for a large copy; folders are typed, not picked.
+

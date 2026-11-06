@@ -11,6 +11,7 @@ import { PresenceProvider } from "./presence";
 import { SettingsProvider } from "./settings";
 import DiagnosticsView from "./views/DiagnosticsView";
 import GameLibrary from "./views/GameLibrary";
+import ModsView from "./views/ModsView";
 import PlaytimeTracker from "./views/PlaytimeTracker";
 import SettingsView from "./views/SettingsView";
 
@@ -19,6 +20,7 @@ function renderView(view: ViewId, query: string) {
   if (view === "settings") return <SettingsView />;
   if (view === "playtime") return <PlaytimeTracker />;
   if (view === "module:diagnostics") return <DiagnosticsView />;
+  if (view === "module:mods") return <ModsView />;
   return renderModule(view.slice("module:".length));
 }
 
