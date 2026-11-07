@@ -4,6 +4,7 @@
 //! one checks that the shell accepts exactly that, answers with the shapes the page reads, and that
 //! a refused request reaches the page as plain text. The mock runtime opens no window.
 
+use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -19,6 +20,7 @@ use tauri::webview::InvokeRequest;
 
 use sul_core::adapters::{AdapterRegistry, GameAdapter, LaunchPlan, ModLayout, Recognition};
 use sul_core::capability::CapabilityEntry;
+use sul_core::process::{Child, ExitInfo, ProcessLauncher, ProcessSpec};
 use sul_core::roots::DiskSpace;
 
 use crate::{DiscordState, commands::AppState, handlers};
@@ -71,9 +73,57 @@ fn game(id: &str, name: &str, source: GameSource, store_id: Option<&str>) -> Ins
     }
 }
 
+/// A launcher that starts nothing: it remembers what it was asked to start, and the "program" it pretends to start
+/// finishes after the number of polls queued in `scripts` (none queued: at once, with code 0).
+#[derive(Clone, Default)]
+struct Launched {
+    started: Arc<Mutex<Vec<ProcessSpec>>>,
+    /// (polls before the program exits, its exit code)
+    scripts: Arc<Mutex<VecDeque<(usize, i32)>>>,
+}
+
+struct PretendChild {
+    polls: usize,
+    exits_after: usize,
+    code: i32,
+}
+
+impl Child for PretendChild {
+    fn pid(&self) -> u32 {
+        7777
+    }
+    fn poll(&mut self) -> sul_core::Result<Option<ExitInfo>> {
+        if self.polls >= self.exits_after {
+            return Ok(Some(ExitInfo {
+                code: Some(self.code),
+                success: self.code == 0,
+            }));
+        }
+        self.polls += 1;
+        Ok(None)
+    }
+    fn captured(&self) -> Option<sul_core::process::Captured> {
+        None
+    }
+}
+
+impl ProcessLauncher for Launched {
+    fn start(&self, spec: &ProcessSpec) -> sul_core::Result<Box<dyn Child>> {
+        self.started.lock().unwrap().push(spec.clone());
+        let (exits_after, code) = self.scripts.lock().unwrap().pop_front().unwrap_or((0, 0));
+        Ok(Box::new(PretendChild {
+            polls: 0,
+            exits_after,
+            code,
+        }))
+    }
+}
+
 struct Shell {
     webview: tauri::WebviewWindow<MockRuntime>,
     opened: Opened,
+    /// What the Tools tab was asked to start. No test in this file starts a real program.
+    launched: Launched,
     // Keep the app and the folder alive as long as the webview is used.
     _app: tauri::App<MockRuntime>,
     _dir: tempfile::TempDir,
@@ -103,14 +153,16 @@ fn shell_with(
             .unwrap();
     }
     let opened = Opened::default();
+    let launched = Launched::default();
     let steam = SteamManager::with_parts(Box::new(SteamClosed), Box::new(opened.clone()));
     let app = mock_builder()
         .manage(DiscordState::default())
-        .manage(AppState::with_parts(
+        .manage(AppState::with_parts_and_launcher(
             &file,
             steam,
             Box::new(Plenty),
             adapters,
+            Box::new(launched.clone()),
         ))
         .invoke_handler(handlers())
         .build(mock_context(noop_assets()))
@@ -121,6 +173,7 @@ fn shell_with(
     Shell {
         webview,
         opened,
+        launched,
         _app: app,
         _dir: dir,
     }
@@ -249,6 +302,32 @@ fn every_command_the_page_knows_is_reachable() {
         (
             "builder_mod_files",
             json!({ "gameId": "x", "modId": "m", "version": "1", "filter": "" }),
+        ),
+        ("tools_view", json!({})),
+        (
+            "tools_register",
+            json!({ "request": { "id": "t", "display_name": "T", "version": "1", "exe_path": "/nope",
+                                 "redistribution": "unknown", "license_note": "", "source_note": "" } }),
+        ),
+        ("tools_check", json!({ "id": "t" })),
+        (
+            "tools_accept_change",
+            json!({ "id": "t", "newVersion": "2", "seenSha256": "x" }),
+        ),
+        (
+            "tools_plan_run",
+            json!({ "request": { "tool_id": "t", "args": [], "settings": {},
+                                 "workspace": { "recipe_id": "r", "root_id": "x", "run_id": "run" } } }),
+        ),
+        (
+            "tools_start_run",
+            json!({ "request": { "tool_id": "t", "args": [], "settings": {},
+                                 "workspace": { "recipe_id": "r", "root_id": "x", "run_id": "run" } } }),
+        ),
+        ("tools_poll_run", json!({ "run": 1 })),
+        (
+            "tools_run_records",
+            json!({ "workspace": { "recipe_id": "r", "root_id": "x", "run_id": "run" } }),
         ),
     ] {
         // Whatever the answer is, it must not be Tauri's "not registered" refusal.
@@ -1711,4 +1790,343 @@ fn builder_refusals_reach_the_page_as_text_and_the_arguments_must_be_camel_case(
         .call("builder_plan_recipe", json!({ "recipe_id": "brighter" }))
         .unwrap_err();
     assert!(bad.as_str().unwrap().contains("recipeId"), "{bad}");
+}
+
+// ---------------------------------------------------------------------------
+// Tools (slice C2)
+// ---------------------------------------------------------------------------
+
+const TOOLS_VIEW_KEYS: [&str; 6] = [
+    "known",
+    "mod_roots",
+    "run_errors",
+    "running",
+    "tools",
+    "workspaces",
+];
+
+const TOOL_RECORD_KEYS: [&str; 11] = [
+    "display_name",
+    "exe_path",
+    "exe_sha256",
+    "exe_size",
+    "history",
+    "id",
+    "license_note",
+    "redistribution",
+    "registered_unix",
+    "source_note",
+    "version",
+];
+
+const TOOL_RUN_RECORD_KEYS: [&str; 15] = [
+    "added",
+    "args",
+    "changed",
+    "comparison_error",
+    "env_names",
+    "exit_code",
+    "finished_unix",
+    "limits",
+    "removed",
+    "settings",
+    "started_unix",
+    "success",
+    "tool_id",
+    "tool_sha256",
+    "tool_version",
+];
+
+/// A shell with a mod library, a stored mod, a finished run of a recipe (the place a tool works) and a program on
+/// disk that is not yet recorded. Returns the shell, the program's path and the run as the page names it.
+fn tools_shell() -> (Shell, PathBuf, Value) {
+    let (shell, _install, build, src) = mods_shell(tiny_adapters());
+    import_mod_and_make_profile(&shell, &build, &src);
+    let base = src.parent().unwrap().to_path_buf();
+    shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": {
+                "schema": 1, "id": "plain", "name": "Plain", "game_id": "gog-1", "description": "",
+                "steps": [ { "op": "layer_mod", "mod_id": "ui", "version": "1.0", "into": "" } ] },
+                "replaces": null }),
+        )
+        .unwrap();
+    let ran = shell
+        .call(
+            "builder_run_recipe",
+            json!({ "recipeId": "plain", "rootId": "modlib" }),
+        )
+        .unwrap();
+    let run_id = ran["record"]["run_id"].as_str().unwrap().to_owned();
+    let exe = base.join("tools").join("audio.exe");
+    std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+    std::fs::write(&exe, "pretend program").unwrap();
+    (
+        shell,
+        exe,
+        json!({ "recipe_id": "plain", "root_id": "modlib", "run_id": run_id }),
+    )
+}
+
+fn tool_registration(exe: &std::path::Path) -> Value {
+    json!({ "request": { "id": "audio", "display_name": "Audio tool", "version": "1.0",
+                         "exe_path": exe.to_str().unwrap(), "redistribution": "unknown",
+                         "license_note": "", "source_note": "installed by me" } })
+}
+
+fn tool_run(workspace: &Value) -> Value {
+    json!({ "request": { "tool_id": "audio", "args": ["--in", "a.bin"],
+                         "settings": { "bank": "music" }, "workspace": workspace } })
+}
+
+#[test]
+fn the_tools_view_has_exactly_the_fields_the_page_reads() {
+    let view = shell(vec![]).call("tools_view", json!({})).unwrap();
+    assert_eq!(keys(&view), TOOLS_VIEW_KEYS);
+    for k in [
+        "known",
+        "mod_roots",
+        "run_errors",
+        "running",
+        "tools",
+        "workspaces",
+    ] {
+        assert!(view[k].is_array(), "{k}");
+    }
+    assert_eq!(view["known"].as_array().unwrap().len(), 2);
+    let known = &view["known"][0];
+    assert_eq!(
+        keys(known),
+        ["finding", "id", "name", "not_established", "status"]
+    );
+    assert_eq!(known["id"], "hd2-audio-modder");
+    assert_eq!(known["status"], "not_investigated");
+    assert_eq!(view["known"][1]["id"], "wwise");
+}
+
+#[test]
+fn a_tool_is_recorded_checked_changed_accepted_run_polled_and_its_records_read_through_the_commands()
+ {
+    let (shell, exe, workspace) = tools_shell();
+
+    // The finished recipe run is listed as a place a tool can work.
+    let view = shell.call("tools_view", json!({})).unwrap();
+    assert_eq!(
+        keys(&view["workspaces"][0]),
+        ["recipe_id", "recipe_name", "root_id", "run_id"]
+    );
+    assert_eq!(view["workspaces"][0]["run_id"], workspace["run_id"]);
+    assert_eq!(view["mod_roots"][0]["id"], "modlib");
+
+    // Recording reads and hashes the file and starts nothing.
+    let view = shell
+        .call("tools_register", tool_registration(&exe))
+        .unwrap();
+    assert_eq!(keys(&view), TOOLS_VIEW_KEYS);
+    let tool = &view["tools"][0];
+    assert_eq!(keys(tool), TOOL_RECORD_KEYS);
+    assert_eq!(tool["exe_size"], 15);
+    assert_eq!(tool["redistribution"], "unknown");
+    assert_eq!(tool["history"], json!([]));
+    assert!(shell.launched.started.lock().unwrap().is_empty());
+
+    let checked = shell.call("tools_check", json!({ "id": "audio" })).unwrap();
+    assert_eq!(keys(&checked), ["id", "status"]);
+    assert_eq!(checked["status"], json!({ "state": "matches" }));
+
+    // The file changes: the check says so, and the tool is neither planned as runnable nor started.
+    std::fs::write(&exe, "version two").unwrap();
+    let checked = shell.call("tools_check", json!({ "id": "audio" })).unwrap();
+    assert_eq!(
+        keys(&checked["status"]),
+        ["exe_sha256", "exe_size", "state"]
+    );
+    assert_eq!(checked["status"]["state"], "changed");
+    let seen = checked["status"]["exe_sha256"].as_str().unwrap().to_owned();
+    let blocked = shell.call("tools_plan_run", tool_run(&workspace)).unwrap();
+    assert!(
+        !blocked["problems"].as_array().unwrap().is_empty(),
+        "{blocked}"
+    );
+    let refused = shell
+        .call("tools_start_run", tool_run(&workspace))
+        .unwrap_err();
+    assert!(
+        refused.as_str().unwrap().contains("cannot be run"),
+        "{refused}"
+    );
+    assert!(shell.launched.started.lock().unwrap().is_empty());
+
+    // Accepting names the hash the check showed.
+    let view = shell
+        .call(
+            "tools_accept_change",
+            json!({ "id": "audio", "newVersion": "2.0", "seenSha256": seen }),
+        )
+        .unwrap();
+    assert_eq!(view["tools"][0]["version"], "2.0");
+    assert_eq!(view["tools"][0]["history"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        keys(&view["tools"][0]["history"][0]),
+        ["exe_sha256", "exe_size", "recorded_unix", "version"]
+    );
+
+    // The plan shows what would start, in the run's files folder, and starts nothing.
+    let plan = shell.call("tools_plan_run", tool_run(&workspace)).unwrap();
+    assert_eq!(
+        keys(&plan),
+        [
+            "args",
+            "cwd",
+            "exe",
+            "problems",
+            "tool_sha256",
+            "tool_version"
+        ]
+    );
+    assert_eq!(plan["problems"], json!([]));
+    assert_eq!(plan["args"], json!(["--in", "a.bin"]));
+    assert_eq!(plan["tool_version"], "2.0");
+    let cwd = PathBuf::from(plan["cwd"].as_str().unwrap());
+    assert!(cwd.ends_with("files") && cwd.is_dir(), "{cwd:?}");
+    assert!(shell.launched.started.lock().unwrap().is_empty());
+
+    // Start (the program stays "running" for one poll), poll twice, read the record.
+    shell.launched.scripts.lock().unwrap().push_back((1, 0));
+    let started = shell.call("tools_start_run", tool_run(&workspace)).unwrap();
+    assert_eq!(keys(&started), ["run", "view"]);
+    assert_eq!(
+        keys(&started["run"]),
+        ["args", "pid", "run", "started_unix", "tool_id", "workspace"]
+    );
+    assert_eq!(started["run"]["pid"], 7777);
+    assert_eq!(started["view"]["running"][0]["run"], started["run"]["run"]);
+    {
+        let launched = shell.launched.started.lock().unwrap();
+        assert_eq!(launched.len(), 1);
+        assert_eq!(launched[0].exe, exe);
+        assert_eq!(launched[0].args, ["--in", "a.bin"]);
+        assert_eq!(launched[0].cwd, cwd);
+        assert!(launched[0].env.is_empty());
+    }
+    std::fs::write(cwd.join("data").join("from-tool.bin"), "made by the tool").unwrap();
+
+    let run = started["run"]["run"].clone();
+    let first = shell.call("tools_poll_run", json!({ "run": run })).unwrap();
+    assert_eq!(first, json!({ "state": "running", "pid": 7777 }));
+    let done = shell.call("tools_poll_run", json!({ "run": run })).unwrap();
+    assert_eq!(
+        keys(&done),
+        ["record", "save_error", "saved_as", "state", "view"]
+    );
+    assert_eq!(done["state"], "finished");
+    assert_eq!(keys(&done["record"]), TOOL_RUN_RECORD_KEYS);
+    assert_eq!(done["record"]["success"], true);
+    assert_eq!(done["record"]["tool_version"], "2.0");
+    assert_eq!(done["record"]["settings"], json!({ "bank": "music" }));
+    assert_eq!(done["record"]["env_names"], json!([]));
+    assert_eq!(done["record"]["added"][0]["path"], "data/from-tool.bin");
+    assert_eq!(done["save_error"], Value::Null);
+    assert_eq!(done["view"]["running"], json!([]));
+    let kept = cwd
+        .parent()
+        .unwrap()
+        .join(".sul-tool-runs")
+        .join(done["saved_as"].as_str().unwrap());
+    assert!(
+        kept.is_file(),
+        "the record is kept beside run.json: {kept:?}"
+    );
+
+    let records = shell
+        .call("tools_run_records", json!({ "workspace": workspace }))
+        .unwrap();
+    assert_eq!(keys(&records), ["records", "total", "unreadable"]);
+    assert_eq!(records["total"], 1);
+    assert_eq!(keys(&records["records"][0]), ["name", "record"]);
+    assert_eq!(records["records"][0]["record"], done["record"]);
+
+    // The run is no longer followed.
+    let gone = shell
+        .call("tools_poll_run", json!({ "run": run }))
+        .unwrap_err();
+    assert!(gone.as_str().unwrap().contains("no tool run"), "{gone}");
+}
+
+#[test]
+fn tool_refusals_reach_the_page_as_text_and_the_arguments_must_be_camel_case() {
+    let (shell, exe, workspace) = tools_shell();
+    shell
+        .call("tools_register", tool_registration(&exe))
+        .unwrap();
+    let refused = |cmd: &str, args: Value, needle: &str| {
+        let e = shell.call(cmd, args).unwrap_err();
+        assert!(e.as_str().unwrap().contains(needle), "{cmd}: {e}");
+    };
+
+    refused(
+        "tools_register",
+        tool_registration(&exe),
+        "already recorded",
+    );
+    let mut relative = tool_registration(&exe);
+    relative["request"]["id"] = json!("other");
+    relative["request"]["exe_path"] = json!("relative/tool.exe");
+    refused("tools_register", relative, "full path");
+    let mut permitted = tool_registration(&exe);
+    permitted["request"]["id"] = json!("other");
+    permitted["request"]["redistribution"] = json!("permitted");
+    refused("tools_register", permitted, "licence");
+    refused("tools_check", json!({ "id": "ghost" }), "no tool");
+    refused(
+        "tools_accept_change",
+        json!({ "id": "audio", "newVersion": "2.0", "seenSha256": "ab" }),
+        "nothing to accept",
+    );
+
+    // A place that is not a finished run of a recipe is refused, and so is a name that is a path.
+    let mut elsewhere = workspace.clone();
+    elsewhere["run_id"] = json!("../../x");
+    refused("tools_plan_run", tool_run(&elsewhere), "run id");
+    refused("tools_start_run", tool_run(&elsewhere), "run id");
+    refused(
+        "tools_run_records",
+        json!({ "workspace": elsewhere }),
+        "run id",
+    );
+    let mut builds_root = workspace.clone();
+    builds_root["root_id"] = json!("ssd");
+    refused(
+        "tools_start_run",
+        tool_run(&builds_root),
+        "not a mod library",
+    );
+    let mut ghost = tool_run(&workspace);
+    ghost["request"]["tool_id"] = json!("ghost");
+    refused("tools_start_run", ghost, "no tool");
+    refused("tools_poll_run", json!({ "run": 99 }), "no tool run");
+    assert!(shell.launched.started.lock().unwrap().is_empty());
+
+    // The page cannot send an environment: whatever it sends is ignored, and nothing starts with one.
+    let mut with_env = tool_run(&workspace);
+    with_env["request"]["env"] = json!([["SECRET_TOKEN", "s3cret"]]);
+    shell.call("tools_start_run", with_env).unwrap();
+    assert!(shell.launched.started.lock().unwrap()[0].env.is_empty());
+
+    // Top-level arguments are camelCase; a request object is snake_case and must be whole.
+    let bad = shell
+        .call(
+            "tools_accept_change",
+            json!({ "id": "audio", "new_version": "2.0", "seen_sha256": "ab" }),
+        )
+        .unwrap_err();
+    assert!(bad.as_str().unwrap().contains("newVersion"), "{bad}");
+    let bad = shell
+        .call(
+            "tools_start_run",
+            json!({ "request": { "tool_id": "audio", "args": [] } }),
+        )
+        .unwrap_err();
+    assert!(bad.as_str().unwrap().contains("settings"), "{bad}");
 }

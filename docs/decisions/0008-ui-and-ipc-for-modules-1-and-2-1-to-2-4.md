@@ -124,3 +124,40 @@ Calls made while building it (all inside the plan; say so if any should change):
 
 Still open from this slice: no real adapter; no remove or rename for a recipe; no way to delete a run's workspace folder; no progress or cancel for a large
 run; folders are typed, not picked. Slice C2 (external tools) and slice D (launch, catalogue, game detail) are not built.
+
+
+## Slice C2, built 2026-11-07 (external tools)
+
+The second half of slice C: the Tools panel, on the Mods & Mod Builder page under the builder panel. What was built, as planned: the tools half of
+`ManagerService` (`manager/tooling.rs`); three small additions to the library (`recipe::run_folders`, which finds the two folders of a finished run;
+`tools::list_run_records`; and `accept_change` taking the hash the owner was shown); eight commands (`tools_view`, `tools_register`, `tools_check`,
+`tools_accept_change`, `tools_plan_run`, `tools_start_run`, `tools_poll_run`, `tools_run_records`); and `ui/src/lib/tools.ts` with
+`ui/src/components/ToolsPanel.tsx`.
+
+Calls made while building it (all inside the plan; say so if any should change):
+
+- **SUL never copies, bundles or downloads a tool.** The owner installs a program and types its full path; SUL hashes the file once when it is recorded and
+  otherwise leaves it alone. The version, licence and source are the owner's words and are not checked.
+- **A tool works in one place only: the `files` folder of a finished recipe run** in a mod library. The page names the recipe, the library folder and the
+  run; it never sends a path, and a place that is not a finished run (no record, no `files` folder, another recipe, a builds folder) is refused before
+  anything else is asked.
+- **A changed tool is not run.** Starting checks the program's file again and refuses if it is not the recorded one. Accepting a change needs a version
+  the owner writes and names the hash a check showed them; it is refused if the file is the recorded one, is missing, or is no longer the file they were shown.
+- **Nothing starts without two steps.** "Preview the run…" only plans and shows what would start (program, hash, folder, arguments); "Start the tool" asks
+  again. The core plans again at the start and refuses a blocked plan whatever the page sends.
+- **No environment variables are passed** (the page has no way to send them), so no secret can be put in one. Arguments are recorded as given: the page says
+  not to put secrets in them. The "settings" a person types (name = value lines) are written into the record, not given to the program.
+- **At most four tools at once, one per workspace.** A started tool is followed only while the app stays open. **SUL cannot cancel or confine a program it
+  starts**: it can do anything the owner's Windows account can, including writing outside the workspace, and the preview and the page say so. A program still
+  running when the app closes is no longer followed, so its record is never written.
+- **A record is kept beside the run** (in a `.sul-tool-runs` folder in the run's folder, outside `files`, so it never looks like a change to the files), is never
+  overwritten, and lists what was added, changed and removed inside the workspace. A folder that could not be compared is shown as that, never as "nothing
+  changed". A record that could not be saved is still shown, with the reason. The page lists the 50 newest records of a run and says how many there are.
+- **A tool that changes the run's files makes "Check files" on that run report them as changed.** That is the check working: the record says what the tool did.
+- **The app's own constructor gives the service the real launcher** (`StdLauncher`); every other constructor, including the one tests use, starts nothing.
+  So in the app, "Start the tool" really starts the recorded program. **No real tool has ever been run**: every test uses a launcher that starts nothing.
+- **The two tools the spec names stay "Not investigated".** They are listed with what was read and what was not established; neither is bundled, set up or run.
+
+Still open from this slice: no cancel, no timeout and no confinement for a started program; no real tool was ever run; nothing removes or renames a recorded
+tool or a record; folders and program paths are typed, not picked; a run's workspace folder cannot be deleted from the app. Slice D (launch, catalogue,
+game detail) is not built.

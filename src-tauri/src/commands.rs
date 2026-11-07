@@ -11,13 +11,16 @@ use std::sync::Arc;
 
 use sul_core::adapters::AdapterRegistry;
 use sul_core::builder::recipe::{Recipe, RunPlan, RunRecord};
+use sul_core::builder::tools::{StoredRunRecords, ToolRunPlan};
 use sul_core::manager::{
     BuildSource, BuilderView, BuiltView, Deployed, ManagerService, ManagerView, ModFileList,
     ModSource, ModVerified, ModsView, ProfileEdit, Purged, PurgedAndDeployed, RecipeRan,
-    STATE_FOLDER, Undone, VerifiedView,
+    STATE_FOLDER, ToolChecked, ToolPolled, ToolRegisterRequest, ToolRunRequest, ToolStarted,
+    ToolsView, Undone, VerifiedView, WorkspaceRef,
 };
 use sul_core::manifest::{Variant, VerifyReport};
 use sul_core::mods::deploy::{DeployPlan, PurgePlan};
+use sul_core::process::{ProcessLauncher, StdLauncher};
 use sul_core::registry::{GameScanner, ScanOptions, system_scanner};
 use sul_core::roots::{DiskSpace, RootKind, SystemDiskSpace};
 use sul_core::service::{GameView, LibraryService, MatrixView, ScanView};
@@ -42,24 +45,37 @@ impl AppState {
         Self::with_steam(library_file, SteamManager::system())
     }
 
-    /// As [`open`](Self::open), with the given Steam manager (tests).
+    /// As [`open`](Self::open), with the given Steam manager (tests). The tools the owner records are started
+    /// with the real launcher: this is the one constructor, with `open`, that can start a program.
     pub fn with_steam(library_file: &Path, steam: SteamManager) -> Self {
-        Self::with_parts(
+        Self::with_parts_and_launcher(
             library_file,
             steam,
             Box::new(SystemDiskSpace),
             AdapterRegistry::new(),
+            Box::new(StdLauncher),
         )
     }
 
-    /// As [`with_steam`](Self::with_steam), with the given free-space reader (tests; the real one needs Windows)
-    /// and the game adapters this build knows. The app registers none: no adapter for a real game exists yet, so
-    /// no mod is deployed for any game.
-    pub fn with_parts(
+    /// As [`with_steam`](Self::with_steam), with the given free-space reader (tests; the real one needs Windows), the
+    /// game adapters this build knows and what starts the programs of the Tools tab. The app registers no adapter:
+    /// no adapter for a real game exists yet, so no mod is deployed for any game.
+    pub fn with_parts_and_launcher(
         library_file: &Path,
         steam: SteamManager,
         disk: Box<dyn DiskSpace + Send>,
         adapters: AdapterRegistry,
+        launcher: Box<dyn ProcessLauncher + Send>,
+    ) -> Self {
+        Self::assemble(library_file, steam, |dir| {
+            ManagerService::with_parts_and_launcher(dir, disk, adapters, launcher)
+        })
+    }
+
+    fn assemble(
+        library_file: &Path,
+        steam: SteamManager,
+        open_manager: impl FnOnce(&Path) -> sul_core::Result<ManagerService>,
     ) -> Self {
         let library = LibraryService::open(library_file)
             .map(Arc::new)
@@ -68,7 +84,7 @@ impl AppState {
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join(STATE_FOLDER);
-        let manager = ManagerService::with_parts(&state_dir, disk, adapters)
+        let manager = open_manager(&state_dir)
             .map(Arc::new)
             .map_err(|e| format!("the build manager could not be opened: {e}"));
         let state = Self {
@@ -622,6 +638,105 @@ pub async fn builder_mod_files(
     blocking(move || {
         app.manager()?
             .mod_files(&game_id, &mod_id, &version, &filter)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// The recorded tools, what is known about the two tools spec 2.4 names, the finished recipe runs a tool can work
+/// in, and the tools being followed. Reads no tool file.
+#[tauri::command]
+pub async fn tools_view(state: State<'_, AppState>) -> Result<ToolsView, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.tools_view().map_err(|e| e.to_string())).await
+}
+
+/// Record a program the owner installed: its full path, hashed now. Nothing is copied, downloaded or started.
+#[tauri::command]
+pub async fn tools_register(
+    request: ToolRegisterRequest,
+    state: State<'_, AppState>,
+) -> Result<ToolsView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .tool_register(&request)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Whether a tool's file is still the recorded one. Reads the file and changes nothing.
+#[tauri::command]
+pub async fn tools_check(id: String, state: State<'_, AppState>) -> Result<ToolChecked, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.tool_check(&id).map_err(|e| e.to_string())).await
+}
+
+/// Accept the changed file as the tool, at a version the owner types. Names the hash the check showed.
+#[tauri::command]
+pub async fn tools_accept_change(
+    id: String,
+    new_version: String,
+    seen_sha256: String,
+    state: State<'_, AppState>,
+) -> Result<ToolsView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .tool_accept_change(&id, &new_version, &seen_sha256)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Exactly what a run would start, and anything that would stop it. Starts nothing.
+#[tauri::command]
+pub async fn tools_plan_run(
+    request: ToolRunRequest,
+    state: State<'_, AppState>,
+) -> Result<ToolRunPlan, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .tool_plan_run(&request)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Start a tool on a finished recipe run's files. Returns at once; poll the run until it has finished.
+#[tauri::command]
+pub async fn tools_start_run(
+    request: ToolRunRequest,
+    state: State<'_, AppState>,
+) -> Result<ToolStarted, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .tool_start_run(&request)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Has a followed tool finished? Once it has, its record is kept beside the run.
+#[tauri::command]
+pub async fn tools_poll_run(run: u64, state: State<'_, AppState>) -> Result<ToolPolled, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.tool_poll_run(run).map_err(|e| e.to_string())).await
+}
+
+/// The records kept for a finished recipe run, newest first. Reads only.
+#[tauri::command]
+pub async fn tools_run_records(
+    workspace: WorkspaceRef,
+    state: State<'_, AppState>,
+) -> Result<StoredRunRecords, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .tool_run_records(&workspace)
             .map_err(|e| e.to_string())
     })
     .await

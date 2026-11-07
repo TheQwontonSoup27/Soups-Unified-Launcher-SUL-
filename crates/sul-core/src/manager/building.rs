@@ -182,7 +182,7 @@ fn recipe_of<'a>(g: &'a Inner, id: &str) -> Result<&'a Recipe> {
         .ok_or_else(|| Error::Invalid(format!("no saved recipe with id {id:?}")))
 }
 
-fn builder_view_of(g: &Inner) -> Result<BuilderView> {
+pub(super) fn builder_view_of(g: &Inner) -> Result<BuilderView> {
     let ctx = ctx_of(g);
     let mod_roots: Vec<RootView> = root_views(g)
         .into_iter()

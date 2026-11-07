@@ -157,6 +157,14 @@ fn handlers<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         commands::builder_read_run,
         commands::builder_verify_run,
         commands::builder_mod_files,
+        commands::tools_view,
+        commands::tools_register,
+        commands::tools_check,
+        commands::tools_accept_change,
+        commands::tools_plan_run,
+        commands::tools_start_run,
+        commands::tools_poll_run,
+        commands::tools_run_records,
     ]
 }
 

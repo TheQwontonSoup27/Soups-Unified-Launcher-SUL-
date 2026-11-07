@@ -550,17 +550,17 @@ describe("the Mods page", () => {
     },
   });
 
-  test("shows the builder panel after the mods panel, and the not-built note names only external tools", async () => {
+  test("shows the builder panel after the mods panel, and the not-built note no longer names the builder, patches or external tools", async () => {
     const builder = fakeBuilder(world());
     const mods = fakeMods();
     const { host, unmount } = await mount(<ModsView api={mods.api} builderApi={builder.api} libraryApi={libraryApi()} />);
     await settle();
     const text = host.textContent ?? "";
-    assert.match(text, /mod profiles, deploy\/purge, the builder and patches are built and Experimental; external tools are not built yet/);
+    assert.match(text, /mod profiles, deploy\/purge, the builder, patches and external tools are built and Experimental/);
     assert.ok(text.indexOf("Mods and profiles") < text.indexOf("Mod builder and patches"));
     assert.ok(text.indexOf("Mod builder and patches") < text.indexOf("Not built yet"));
     assert.match(one(panel(host), "li[aria-label='Recipe Loud']").textContent ?? "", /Helldivers 2/, "the library's game names are used");
-    assert.match(text, /page for external tools is not built yet/);
+    assert.doesNotMatch(text, /external tools are not built/);
     assert.doesNotMatch(text, /mod builder, patches and external tools are not built yet/);
     unmount();
   });

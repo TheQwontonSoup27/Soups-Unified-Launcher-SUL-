@@ -592,6 +592,26 @@ fn run_dir(ctx: &Ctx, root_id: &str, recipe_id: &str, run_id: &str) -> Result<Pa
     Ok(workspace_dir(ctx, root_id, recipe_id)?.join(run_id))
 }
 
+/// The two folders of a finished run: the run folder (it holds `run.json`) and the `files` folder inside it that the
+/// recipe built. Both must be plain folders, so a link cannot send a tool somewhere else. A run that does not exist,
+/// or one still being staged, is refused.
+pub fn run_folders(
+    ctx: &Ctx,
+    root_id: &str,
+    recipe_id: &str,
+    run_id: &str,
+) -> Result<(PathBuf, PathBuf)> {
+    let dir = run_dir(ctx, root_id, recipe_id, run_id)?;
+    let files = dir.join(FILES_DIR);
+    let plain = |p: &std::path::Path| std::fs::symlink_metadata(p).is_ok_and(|m| m.is_dir());
+    if !plain(&dir) || !dir.join(RUN_FILE).is_file() || !plain(&files) {
+        return Err(Error::Invalid(format!(
+            "there is no finished run {run_id:?} of recipe {recipe_id:?} in library folder {root_id:?}"
+        )));
+    }
+    Ok((dir, files))
+}
+
 /// Read a finished run's provenance record.
 pub fn read_run(ctx: &Ctx, root_id: &str, recipe_id: &str, run_id: &str) -> Result<RunRecord> {
     let file = run_dir(ctx, root_id, recipe_id, run_id)?.join(RUN_FILE);
@@ -982,6 +1002,45 @@ mod tests {
         assert_eq!(v.modified, ["data/X.bin"]);
         assert_eq!(v.missing, ["mods/only-a.txt"]);
         assert_eq!(v.extra, ["mods/new.txt"]);
+    }
+
+    #[test]
+    fn a_run_folder_without_its_files_folder_is_not_a_finished_run() {
+        let f = fx();
+        let r = recipe("r1", vec![layer("a", "1.0", "")]);
+        let rec = run_recipe(&f.w.ctx(), &f.store, &r, &layout(), "mods").unwrap();
+        let (dir, files) = run_folders(&f.w.ctx(), "mods", "r1", &rec.run_id).unwrap();
+        std::fs::remove_dir_all(&files).unwrap();
+        assert!(dir.join(RUN_FILE).is_file(), "the record is still there");
+        let e = run_folders(&f.w.ctx(), "mods", "r1", &rec.run_id)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("no finished run"), "{e}");
+    }
+
+    #[test]
+    fn the_folders_of_a_run_are_found_only_for_a_finished_run_in_a_mod_library() {
+        let f = fx();
+        let r = recipe("r1", vec![layer("a", "1.0", "")]);
+        let rec = run_recipe(&f.w.ctx(), &f.store, &r, &layout(), "mods").unwrap();
+        let (dir, files) = run_folders(&f.w.ctx(), "mods", "r1", &rec.run_id).unwrap();
+        assert!(dir.join(RUN_FILE).is_file());
+        assert_eq!(files, dir.join(FILES_DIR));
+        assert!(files.is_dir());
+
+        // A run that does not exist, a staging folder, another recipe, a builds root and a name that is not a run id.
+        assert!(run_folders(&f.w.ctx(), "mods", "r1", "run-nope").is_err());
+        assert!(run_folders(&f.w.ctx(), "mods", "r2", &rec.run_id).is_err());
+        assert!(run_folders(&f.w.ctx(), "ssd", "r1", &rec.run_id).is_err());
+        assert!(run_folders(&f.w.ctx(), "mods", "r1", "../r1").is_err());
+        assert!(run_folders(&f.w.ctx(), "mods", "r1", "").is_err());
+
+        // A run folder without its record is not a finished run.
+        std::fs::remove_file(dir.join(RUN_FILE)).unwrap();
+        let e = run_folders(&f.w.ctx(), "mods", "r1", &rec.run_id)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("no finished run"), "{e}");
     }
 
     #[test]

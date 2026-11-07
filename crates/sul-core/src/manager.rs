@@ -16,7 +16,7 @@
 //!
 //! Everything is tested on made-up folders. It has not been used on a real game.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::adapters::AdapterRegistry;
 use crate::builder::book::RecipeBook;
+use crate::builder::tools::ToolRegistry;
 use crate::builds::{
     ActiveSlot, BuildCheck, BuildRecord, BuildRegistry, Ctx, ImportRequest, RegisterRequest,
     RetiredCopy,
@@ -33,13 +34,16 @@ use crate::journal::Journal;
 use crate::manifest::Variant;
 use crate::mods::profile::Profiles;
 use crate::mods::store::ModStore;
+use crate::process::{ProcessLauncher, StdLauncher};
 use crate::roots::{DiskSpace, LibraryRoots, Root, RootKind, SystemDiskSpace};
 use crate::{Error, Result};
 
 mod building;
 mod modding;
+mod tooling;
 pub use building::*;
 pub use modding::*;
+pub use tooling::*;
 
 /// The folder (beside the library file) that holds this service's state.
 pub const STATE_FOLDER: &str = "managed";
@@ -120,6 +124,12 @@ struct Inner {
     profiles: Profiles,
     recipes: RecipeBook,
     adapters: AdapterRegistry,
+    tools: ToolRegistry,
+    /// What starts programs. Only the app's own constructor gives one that does.
+    launcher: Box<dyn ProcessLauncher + Send>,
+    /// Tools SUL started and is waiting for, by the number it gave each.
+    running: BTreeMap<u64, tooling::Following>,
+    next_run: u64,
 }
 
 pub struct ManagerService {
@@ -132,7 +142,12 @@ impl ManagerService {
     /// cannot be read is an error and is never replaced. No game adapter is registered: no adapter for a real
     /// game exists yet, so nothing can be deployed (see [`with_parts`](Self::with_parts)).
     pub fn open(dir: &Path) -> Result<Self> {
-        Self::with_disk(dir, Box::new(SystemDiskSpace))
+        Self::with_parts_and_launcher(
+            dir,
+            Box::new(SystemDiskSpace),
+            AdapterRegistry::new(),
+            Box::new(StdLauncher),
+        )
     }
 
     /// As [`open`](Self::open) with the given disk-space reader (tests).
@@ -142,10 +157,24 @@ impl ManagerService {
 
     /// As [`open`](Self::open) with a disk-space reader and the game adapters this build of SUL knows. A game with
     /// no adapter has no mod layout, and a mod is never deployed into a game without one.
+    ///
+    /// The service made here starts no programs (a tool cannot be run): only [`open`](Self::open) and
+    /// [`with_parts_and_launcher`](Self::with_parts_and_launcher) give it a launcher that does.
     pub fn with_parts(
         dir: &Path,
         disk: Box<dyn DiskSpace + Send>,
         adapters: AdapterRegistry,
+    ) -> Result<Self> {
+        Self::with_parts_and_launcher(dir, disk, adapters, Box::new(tooling::NoLauncher))
+    }
+
+    /// As [`with_parts`](Self::with_parts) with what starts programs for the Tools tab (the app gives the real one;
+    /// tests give one that starts nothing).
+    pub fn with_parts_and_launcher(
+        dir: &Path,
+        disk: Box<dyn DiskSpace + Send>,
+        adapters: AdapterRegistry,
+        launcher: Box<dyn ProcessLauncher + Send>,
     ) -> Result<Self> {
         Ok(Self {
             inner: Mutex::new(Inner {
@@ -159,6 +188,10 @@ impl ManagerService {
                 profiles: Profiles::open(&dir.join("profiles.json"))?,
                 recipes: RecipeBook::open(&dir.join("recipes.json"))?,
                 adapters,
+                tools: ToolRegistry::open(&dir.join("tools.json"))?,
+                launcher,
+                running: BTreeMap::new(),
+                next_run: 1,
             }),
         })
     }
