@@ -702,12 +702,12 @@ describe("the Mods & Mod Builder page", () => {
     const { host, unmount } = await mount(<ModsView api={fake.api} libraryApi={libraryApi()} />);
     await settle();
     assert.equal(one(host, "h1").textContent, "Mods & Mod Builder");
-    assert.match(host.textContent ?? "", /mod profiles and deploy\/purge are built and Experimental; the rest of the module is not built yet/);
+    assert.match(host.textContent ?? "", /mod profiles, deploy\/purge, the builder and patches are built and Experimental; external tools are not built yet/);
     assert.match(field(form(host, "Add a mod"), "Game").textContent ?? "", /Helldivers 2.*Alpha/, "the games' names, not their ids");
     assert.match(one(host, "[aria-label='Mods']").textContent ?? "", /louder.*Helldivers 2/);
     const text = host.textContent ?? "";
     assert.match(text, /Not built yet/);
-    assert.match(text, /mod builder, patches and external tools are not built yet/);
+    assert.match(text, /page for external tools is not built yet/);
     assert.match(text, /Conflict analysis and measured comparisons are not built at all/);
     assert.ok(text.indexOf("Mods and profiles") < text.indexOf("Not built yet"));
     unmount();
@@ -720,7 +720,7 @@ describe("the Mods & Mod Builder page", () => {
     const { host, unmount } = await mount(<ModsView libraryApi={libraryApi()} />);
     await settle();
     assert.match(panel(host).textContent ?? "", /Browser preview/);
-    assert.deepEqual(calls.calls.filter((c) => c.cmd.startsWith("mods_")), []);
+    assert.deepEqual(calls.calls.filter((c) => c.cmd.startsWith("mods_") || c.cmd.startsWith("builder_")), []);
     calls.remove();
     unmount();
   });

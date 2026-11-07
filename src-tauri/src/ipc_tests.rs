@@ -228,6 +228,28 @@ fn every_command_the_page_knows_is_reachable() {
         ("mods_purge", json!({ "buildId": "b" })),
         ("mods_undo_purge", json!({ "buildId": "b", "purgeId": "x" })),
         ("mods_purge_and_deploy", json!({ "profileId": "p" })),
+        ("builder_view", json!({})),
+        (
+            "builder_save_recipe",
+            json!({ "recipe": { "schema": 1, "id": "r", "name": "R", "game_id": "x", "description": "", "steps": [] }, "replaces": null }),
+        ),
+        ("builder_plan_recipe", json!({ "recipeId": "r" })),
+        (
+            "builder_run_recipe",
+            json!({ "recipeId": "r", "rootId": "x" }),
+        ),
+        (
+            "builder_read_run",
+            json!({ "recipeId": "r", "rootId": "x", "runId": "run" }),
+        ),
+        (
+            "builder_verify_run",
+            json!({ "recipeId": "r", "rootId": "x", "runId": "run" }),
+        ),
+        (
+            "builder_mod_files",
+            json!({ "gameId": "x", "modId": "m", "version": "1", "filter": "" }),
+        ),
     ] {
         // Whatever the answer is, it must not be Tauri's "not registered" refusal.
         let answer = format!("{:?}", shell.call(cmd, args));
@@ -1342,4 +1364,351 @@ fn a_mod_import_from_a_folder_that_is_not_there_is_refused_as_text_and_adds_noth
         shell.call("mods_view", json!({})).unwrap()["mods"],
         json!([])
     );
+}
+
+/// A recipe that layers the mod `ui` and changes the first byte of `data/a.bin` ("NEW-A") from N to O.
+fn a_recipe(sha: &str) -> Value {
+    json!({
+        "schema": 1, "id": "brighter", "name": "Brighter UI", "game_id": "gog-1",
+        "description": "the ui mod with one byte changed",
+        "steps": [
+            { "op": "layer_mod", "mod_id": "ui", "version": "1.0", "into": "" },
+            { "op": "patch_file", "path": "data/a.bin", "patch": {
+                "id": "n-to-o", "description": "N becomes O", "expect_sha256": sha,
+                "hunks": [ { "offset": 0, "old_hex": "4e", "new_hex": "4f" } ] } }
+        ]
+    })
+}
+
+const BUILDER_VIEW_KEYS: [&str; 5] = [
+    "deployable_games",
+    "mod_roots",
+    "mods",
+    "recipes",
+    "run_errors",
+];
+
+#[test]
+fn the_builder_view_has_exactly_the_fields_the_page_reads() {
+    let view = shell(vec![]).call("builder_view", json!({})).unwrap();
+    assert_eq!(keys(&view), BUILDER_VIEW_KEYS);
+    for k in BUILDER_VIEW_KEYS {
+        assert_eq!(view[k], json!([]), "{k}");
+    }
+}
+
+#[test]
+fn a_recipe_is_saved_changed_planned_run_read_and_checked_through_the_commands() {
+    let (shell, _install, build, src) = mods_shell(tiny_adapters());
+    import_mod_and_make_profile(&shell, &build, &src);
+    let modlib = src.parent().unwrap().join("modlib");
+
+    // The hash a patch needs comes from the command made for that.
+    let files = shell
+        .call(
+            "builder_mod_files",
+            json!({ "gameId": "gog-1", "modId": "ui", "version": "1.0", "filter": "A.BIN" }),
+        )
+        .unwrap();
+    assert_eq!(keys(&files), ["files", "matching", "total"]);
+    assert_eq!(
+        (files["matching"].as_u64(), files["total"].as_u64()),
+        (Some(1), Some(2))
+    );
+    assert_eq!(keys(&files["files"][0]), ["path", "sha256", "size"]);
+    assert_eq!(files["files"][0]["path"], "data/a.bin");
+    let sha = files["files"][0]["sha256"].as_str().unwrap().to_owned();
+
+    // Saving reads no mod and writes only the list.
+    let view = shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": a_recipe(&sha), "replaces": null }),
+        )
+        .unwrap();
+    assert_eq!(keys(&view), BUILDER_VIEW_KEYS);
+    assert_eq!(view["deployable_games"], json!(["gog-1"]));
+    assert_eq!(view["mods"].as_array().unwrap().len(), 1);
+    let saved = &view["recipes"][0];
+    assert_eq!(
+        keys(saved),
+        ["has_runtime_code", "recipe", "runs", "sha256"]
+    );
+    assert_eq!(saved["has_runtime_code"], false);
+    assert_eq!(saved["runs"], json!([]));
+    let first_sha = saved["sha256"].as_str().unwrap().to_owned();
+    assert!(
+        !modlib.join(".workspaces").exists(),
+        "saving made no workspace"
+    );
+
+    // The preview writes nothing.
+    let plan = shell
+        .call("builder_plan_recipe", json!({ "recipeId": "brighter" }))
+        .unwrap();
+    assert_eq!(
+        keys(&plan),
+        [
+            "files",
+            "inputs",
+            "output_sha256",
+            "patches",
+            "problems",
+            "recipe_sha256",
+            "total_bytes",
+            "warnings"
+        ]
+    );
+    assert_eq!(plan["problems"], json!([]));
+    assert_eq!(plan["files"].as_array().unwrap().len(), 2);
+    assert_eq!(plan["recipe_sha256"], first_sha.as_str());
+    assert!(
+        !modlib.join(".workspaces").exists(),
+        "a preview wrote nothing"
+    );
+
+    // The run builds a new folder in the mod library's workspace.
+    let ran = shell
+        .call(
+            "builder_run_recipe",
+            json!({ "recipeId": "brighter", "rootId": "modlib" }),
+        )
+        .unwrap();
+    assert_eq!(keys(&ran), ["record", "view"]);
+    let record = &ran["record"];
+    assert_eq!(
+        keys(record),
+        [
+            "files",
+            "inputs",
+            "output_sha256",
+            "patches",
+            "recipe",
+            "recipe_sha256",
+            "run_id",
+            "schema",
+            "started_unix",
+            "warnings"
+        ]
+    );
+    assert_eq!(
+        record["output_sha256"], plan["output_sha256"],
+        "the run built what the preview said"
+    );
+    let run_id = record["run_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        ran["view"]["recipes"][0]["runs"],
+        json!([{ "root_id": "modlib", "run_id": run_id }])
+    );
+    let run_files = modlib
+        .join(".workspaces")
+        .join("brighter")
+        .join(&run_id)
+        .join("files");
+    assert_eq!(
+        std::fs::read_to_string(run_files.join("data/a.bin")).unwrap(),
+        "OEW-A"
+    );
+    assert_eq!(
+        std::fs::read_to_string(run_files.join("mods/ui.txt")).unwrap(),
+        "ui"
+    );
+    assert_eq!(
+        std::fs::read_to_string(src.join("data/a.bin")).unwrap(),
+        "NEW-A",
+        "the folder the mod came from was not touched"
+    );
+
+    // Reading the record and checking the files.
+    let args = json!({ "recipeId": "brighter", "rootId": "modlib", "runId": run_id });
+    assert_eq!(
+        shell.call("builder_read_run", args.clone()).unwrap(),
+        *record
+    );
+    let clean = shell.call("builder_verify_run", args.clone()).unwrap();
+    assert_eq!(keys(&clean), ["extra", "missing", "modified"]);
+    assert_eq!(
+        (&clean["extra"], &clean["missing"], &clean["modified"]),
+        (&json!([]), &json!([]), &json!([]))
+    );
+    std::fs::write(run_files.join("data/a.bin"), "changed by hand").unwrap();
+    let dirty = shell.call("builder_verify_run", args).unwrap();
+    assert_eq!(dirty["modified"], json!(["data/a.bin"]));
+
+    // A change must name the recipe it started from; a stale window is refused and nothing changes.
+    let mut renamed = a_recipe(&sha);
+    renamed["name"] = json!("Brighter UI, v2");
+    let stale = shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": renamed, "replaces": "0".repeat(64) }),
+        )
+        .unwrap_err();
+    assert!(
+        stale
+            .as_str()
+            .unwrap()
+            .contains("changed since it was opened"),
+        "{stale}"
+    );
+    let changed = shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": renamed, "replaces": first_sha }),
+        )
+        .unwrap();
+    assert_eq!(changed["recipes"][0]["recipe"]["name"], "Brighter UI, v2");
+    assert_ne!(changed["recipes"][0]["sha256"], first_sha.as_str());
+    assert_eq!(
+        changed["recipes"][0]["runs"].as_array().unwrap().len(),
+        1,
+        "the earlier run is still listed"
+    );
+}
+
+#[test]
+fn with_no_adapter_a_recipe_can_be_saved_but_not_previewed_or_run() {
+    let (shell, _install, build, src) = mods_shell(AdapterRegistry::new());
+    import_mod_and_make_profile(&shell, &build, &src);
+    let modlib = src.parent().unwrap().join("modlib");
+    let sha = "a".repeat(64);
+    let view = shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": a_recipe(&sha), "replaces": null }),
+        )
+        .unwrap();
+    assert_eq!(view["deployable_games"], json!([]));
+    assert_eq!(view["recipes"].as_array().unwrap().len(), 1);
+    let plan = shell
+        .call("builder_plan_recipe", json!({ "recipeId": "brighter" }))
+        .unwrap_err();
+    assert!(plan.as_str().unwrap().contains("no adapter"), "{plan}");
+    let run = shell
+        .call(
+            "builder_run_recipe",
+            json!({ "recipeId": "brighter", "rootId": "modlib" }),
+        )
+        .unwrap_err();
+    assert!(run.as_str().unwrap().contains("no adapter"), "{run}");
+    assert!(!modlib.join(".workspaces").exists(), "nothing was written");
+}
+
+#[test]
+fn a_recipe_that_changes_game_code_is_saved_and_flagged_but_never_planned_or_run() {
+    let (shell, _install, build, src) = mods_shell(tiny_adapters());
+    import_mod_and_make_profile(&shell, &build, &src);
+    let recipe = json!({
+        "schema": 1, "id": "hook", "name": "Hook", "game_id": "gog-1", "description": "",
+        "steps": [ { "op": "runtime_code", "description": "inject a library" } ]
+    });
+    let view = shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": recipe, "replaces": null }),
+        )
+        .unwrap();
+    assert_eq!(view["recipes"][0]["has_runtime_code"], true);
+    for (cmd, args) in [
+        ("builder_plan_recipe", json!({ "recipeId": "hook" })),
+        (
+            "builder_run_recipe",
+            json!({ "recipeId": "hook", "rootId": "modlib" }),
+        ),
+    ] {
+        let e = shell.call(cmd, args).unwrap_err();
+        assert!(
+            e.as_str()
+                .unwrap()
+                .contains("changes code that runs inside the game"),
+            "{cmd}: {e}"
+        );
+    }
+}
+
+#[test]
+fn builder_refusals_reach_the_page_as_text_and_the_arguments_must_be_camel_case() {
+    let (shell, _install, build, src) = mods_shell(tiny_adapters());
+    import_mod_and_make_profile(&shell, &build, &src);
+    let sha = "b".repeat(64);
+    shell
+        .call(
+            "builder_save_recipe",
+            json!({ "recipe": a_recipe(&sha), "replaces": null }),
+        )
+        .unwrap();
+
+    let refused = |cmd: &str, args: Value, needle: &str| {
+        let e = shell.call(cmd, args).unwrap_err();
+        assert!(e.as_str().unwrap().contains(needle), "{cmd}: {e}");
+    };
+    refused(
+        "builder_save_recipe",
+        json!({ "recipe": a_recipe(&sha), "replaces": null }),
+        "already exists",
+    );
+    let mut empty = a_recipe(&sha);
+    empty["id"] = json!("empty");
+    empty["steps"] = json!([]);
+    refused(
+        "builder_save_recipe",
+        json!({ "recipe": empty, "replaces": null }),
+        "1 to",
+    );
+    let mut ghost = a_recipe(&sha);
+    ghost["id"] = json!("ghost");
+    refused(
+        "builder_save_recipe",
+        json!({ "recipe": ghost, "replaces": sha }),
+        "no saved recipe",
+    );
+    refused(
+        "builder_plan_recipe",
+        json!({ "recipeId": "nope" }),
+        "no saved recipe",
+    );
+    refused(
+        "builder_run_recipe",
+        json!({ "recipeId": "brighter", "rootId": "nope" }),
+        "no library root",
+    );
+    refused(
+        "builder_run_recipe",
+        json!({ "recipeId": "brighter", "rootId": "ssd" }),
+        "not a mod library",
+    );
+    refused(
+        "builder_mod_files",
+        json!({ "gameId": "gog-1", "modId": "ghost", "version": "1.0", "filter": "" }),
+        "not in the mod store",
+    );
+    // A run id is a name, never a path.
+    refused(
+        "builder_read_run",
+        json!({ "recipeId": "brighter", "rootId": "modlib", "runId": "../../x" }),
+        "run id",
+    );
+    // The recipe that failed the plan (the patch's hash is made up) was refused and wrote nothing.
+    let plan = shell
+        .call("builder_plan_recipe", json!({ "recipeId": "brighter" }))
+        .unwrap();
+    assert!(!plan["problems"].as_array().unwrap().is_empty(), "{plan}");
+    refused(
+        "builder_run_recipe",
+        json!({ "recipeId": "brighter", "rootId": "modlib" }),
+        "cannot run",
+    );
+    assert!(
+        !src.parent()
+            .unwrap()
+            .join("modlib")
+            .join(".workspaces")
+            .join("brighter")
+            .exists()
+    );
+
+    let bad = shell
+        .call("builder_plan_recipe", json!({ "recipe_id": "brighter" }))
+        .unwrap_err();
+    assert!(bad.as_str().unwrap().contains("recipeId"), "{bad}");
 }

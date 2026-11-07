@@ -10,11 +10,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use sul_core::adapters::AdapterRegistry;
+use sul_core::builder::recipe::{Recipe, RunPlan, RunRecord};
 use sul_core::manager::{
-    BuildSource, BuiltView, Deployed, ManagerService, ManagerView, ModSource, ModVerified,
-    ModsView, ProfileEdit, Purged, PurgedAndDeployed, STATE_FOLDER, Undone, VerifiedView,
+    BuildSource, BuilderView, BuiltView, Deployed, ManagerService, ManagerView, ModFileList,
+    ModSource, ModVerified, ModsView, ProfileEdit, Purged, PurgedAndDeployed, RecipeRan,
+    STATE_FOLDER, Undone, VerifiedView,
 };
-use sul_core::manifest::Variant;
+use sul_core::manifest::{Variant, VerifyReport};
 use sul_core::mods::deploy::{DeployPlan, PurgePlan};
 use sul_core::registry::{GameScanner, ScanOptions, system_scanner};
 use sul_core::roots::{DiskSpace, RootKind, SystemDiskSpace};
@@ -513,6 +515,113 @@ pub async fn mods_purge_and_deploy(
     blocking(move || {
         app.manager()?
             .purge_and_deploy(&profile_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// The saved recipes, the mods they can layer, the mod library folders and which games can be planned.
+#[tauri::command]
+pub async fn builder_view(state: State<'_, AppState>) -> Result<BuilderView, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.builder_view().map_err(|e| e.to_string())).await
+}
+
+/// Keep a recipe: a new one (`replaces` empty) needs an unused id; a changed one names the SHA-256 of the
+/// recipe it started from. Reads no mod and touches no game file.
+#[tauri::command]
+pub async fn builder_save_recipe(
+    recipe: Recipe,
+    replaces: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<BuilderView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .recipe_save(&recipe, replaces.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// What a saved recipe would build. Writes nothing.
+#[tauri::command]
+pub async fn builder_plan_recipe(
+    recipe_id: String,
+    state: State<'_, AppState>,
+) -> Result<RunPlan, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .recipe_plan(&recipe_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Build a saved recipe into a new run folder in a mod library's workspace.
+#[tauri::command]
+pub async fn builder_run_recipe(
+    recipe_id: String,
+    root_id: String,
+    state: State<'_, AppState>,
+) -> Result<RecipeRan, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .recipe_run(&recipe_id, &root_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// The provenance record of a finished run. Reads only.
+#[tauri::command]
+pub async fn builder_read_run(
+    recipe_id: String,
+    root_id: String,
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<RunRecord, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .recipe_read_run(&recipe_id, &root_id, &run_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Compare a finished run's files with its record. Reads only.
+#[tauri::command]
+pub async fn builder_verify_run(
+    recipe_id: String,
+    root_id: String,
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<VerifyReport, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .recipe_verify_run(&recipe_id, &root_id, &run_id)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Some of a stored mod's files with their hashes, to help write a patch step. Reads only.
+#[tauri::command]
+pub async fn builder_mod_files(
+    game_id: String,
+    mod_id: String,
+    version: String,
+    filter: String,
+    state: State<'_, AppState>,
+) -> Result<ModFileList, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .mod_files(&game_id, &mod_id, &version, &filter)
             .map_err(|e| e.to_string())
     })
     .await

@@ -150,6 +150,13 @@ fn handlers<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         commands::mods_purge,
         commands::mods_undo_purge,
         commands::mods_purge_and_deploy,
+        commands::builder_view,
+        commands::builder_save_recipe,
+        commands::builder_plan_recipe,
+        commands::builder_run_recipe,
+        commands::builder_read_run,
+        commands::builder_verify_run,
+        commands::builder_mod_files,
     ]
 }
 

@@ -48,7 +48,7 @@ pub struct ModView {
 }
 
 impl ModView {
-    fn of(rec: &ModRecord) -> Self {
+    pub(super) fn of(rec: &ModRecord) -> Self {
         let m = &rec.manifest;
         Self {
             game_id: m.game_id.clone(),
@@ -453,7 +453,7 @@ impl ManagerService {
     }
 }
 
-fn ctx_of(g: &Inner) -> Ctx<'_> {
+pub(super) fn ctx_of(g: &Inner) -> Ctx<'_> {
     Ctx {
         roots: &g.roots,
         protected: &g.protected,
@@ -469,7 +469,7 @@ fn profile_of<'a>(g: &'a Inner, id: &str) -> Result<&'a Profile> {
 }
 
 /// The folders a game lets mods change. A game with no adapter has none, and no mod is deployed for it.
-fn layout_for(g: &Inner, game_id: &str) -> Result<ModLayout> {
+pub(super) fn layout_for(g: &Inner, game_id: &str) -> Result<ModLayout> {
     let adapter = g.adapters.get(game_id).ok_or_else(|| {
         Error::Invalid(format!(
             "SUL has no adapter for {game_id:?}, so it does not know which folders mods may change in that game, and it deploys nothing without that. Nothing was changed. (No adapter for a real game exists yet.)"

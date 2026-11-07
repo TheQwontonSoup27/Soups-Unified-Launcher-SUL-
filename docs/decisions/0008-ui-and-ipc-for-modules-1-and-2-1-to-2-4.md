@@ -1,6 +1,6 @@
 # 0008 — UI and Tauri commands for Module 1 and items 2.1 to 2.4: the plan
 
-Status: plan, written before the code; slice A built 2026-11-04 and slice B built 2026-11-06 (see the end of this file). Owner go-ahead 2026-11-04: "Proceed with building the UI components and Tauri IPC commands for
+Status: plan, written before the code; slice A built 2026-11-04, slice B built 2026-11-06 and slice C1 built 2026-11-07 (see the end of this file). Owner go-ahead 2026-11-04: "Proceed with building the UI components and Tauri IPC commands for
 Modules 1.1 through 2.4", in the order that "gives us a complete, testable interface slice before tackling Module 2.5+".
 Work is on branch `feature/ui-modules-1-and-2-1-to-2-4`. **Nothing here merges into `main` without the owner's go-ahead.**
 
@@ -98,3 +98,29 @@ Calls made while building it (all inside the plan; say so if any should change):
 Still open from this slice: no real adapter (so deploying has never been tried on a real game); no conflict analysis; no way to choose which files
 of a mod to deploy; no progress or cancel for a large copy; folders are typed, not picked.
 
+
+## Slice C1, built 2026-11-07 (recipes and patches)
+
+Slice C was split into C1 (recipes and patches, the builder panel) and C2 (external tools), so each could be tested and pushed on its own. This is C1. What was built, as planned: the builder half of `ManagerService` (`manager/building.rs`) and the saved-recipe list (`builder/book.rs`);
+seven commands (`builder_view`, `builder_save_recipe`, `builder_plan_recipe`, `builder_run_recipe`, `builder_read_run`, `builder_verify_run`,
+`builder_mod_files`); and the builder panel, which sits under the mods panel on the Mods & Mod Builder page (stacked panels, not tabs, as in slice B).
+
+Calls made while building it (all inside the plan; say so if any should change):
+
+- **A saved recipe has no remove.** Saving writes only the recipe list, atomically. A new recipe needs an unused id; a change must name the SHA-256 of
+  the recipe it started from, so a stale window cannot overwrite a newer edit. The id of a saved recipe cannot change, and neither can its game or its
+  name on the page (the id is made from the name once). There is no remove, as for profiles: every run keeps its own copy of the recipe it came from.
+- **A preview writes nothing and a run is confirmed first.** The page shows what a run would build and asks; the core plans again when it runs. A blocked
+  plan cannot be confirmed. A run goes only into the workspace folder of a mod library, never into a game or a build, and deletes nothing.
+- **Previews and runs need an adapter.** Without one the core has no mod layout to judge a recipe's output, so both are refused, and a recipe for such a
+  game can still be written and saved. No adapter for a real game exists, so in the app every preview and every run is refused today, and the page says so.
+- **A runtime-code step is a note.** A recipe with one can be saved and is flagged on the page, but cannot be previewed or run.
+- **`builder_mod_files` exists only to write patch steps.** A patch step names its file by path and SHA-256; the lookup lists some of a stored mod's files
+  (the first 200 matches, with the number that matched) so the person need not work a hash out by hand.
+- **Hunks are typed as text,** one per line: offset (decimal or 0x hexadecimal), old bytes, new bytes. The page checks the shape; the core checks the
+  rest (order, overlap, same length, that the file has those bytes).
+- **The question dialog scrolls inside itself.** Found when the page was loaded in a browser: a long preview could not be scrolled and its buttons were
+  out of reach. The fix is in the shared dialog style, so it also applies to the questions of slices A and B.
+
+Still open from this slice: no real adapter; no remove or rename for a recipe; no way to delete a run's workspace folder; no progress or cancel for a large
+run; folders are typed, not picked. Slice C2 (external tools) and slice D (launch, catalogue, game detail) are not built.

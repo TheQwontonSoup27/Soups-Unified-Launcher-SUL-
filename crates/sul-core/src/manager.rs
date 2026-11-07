@@ -23,6 +23,7 @@ use std::sync::{Mutex, MutexGuard};
 use serde::{Deserialize, Serialize};
 
 use crate::adapters::AdapterRegistry;
+use crate::builder::book::RecipeBook;
 use crate::builds::{
     ActiveSlot, BuildCheck, BuildRecord, BuildRegistry, Ctx, ImportRequest, RegisterRequest,
     RetiredCopy,
@@ -35,7 +36,9 @@ use crate::mods::store::ModStore;
 use crate::roots::{DiskSpace, LibraryRoots, Root, RootKind, SystemDiskSpace};
 use crate::{Error, Result};
 
+mod building;
 mod modding;
+pub use building::*;
 pub use modding::*;
 
 /// The folder (beside the library file) that holds this service's state.
@@ -115,6 +118,7 @@ struct Inner {
     disk: Box<dyn DiskSpace + Send>,
     store: ModStore,
     profiles: Profiles,
+    recipes: RecipeBook,
     adapters: AdapterRegistry,
 }
 
@@ -153,6 +157,7 @@ impl ManagerService {
                 disk,
                 store: ModStore::open(&dir.join("mods.json"))?,
                 profiles: Profiles::open(&dir.join("profiles.json"))?,
+                recipes: RecipeBook::open(&dir.join("recipes.json"))?,
                 adapters,
             }),
         })
