@@ -18,7 +18,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,18 +31,22 @@ use crate::builds::{
 };
 use crate::fsops::ProtectedRoots;
 use crate::journal::Journal;
+use crate::logging::Logger;
 use crate::manifest::Variant;
 use crate::mods::profile::Profiles;
 use crate::mods::store::ModStore;
 use crate::process::{ProcessLauncher, StdLauncher};
 use crate::roots::{DiskSpace, LibraryRoots, Root, RootKind, SystemDiskSpace};
+use crate::runtime::RuntimeManager;
 use crate::{Error, Result};
 
 mod building;
 mod modding;
+mod playing;
 mod tooling;
 pub use building::*;
 pub use modding::*;
+pub use playing::*;
 pub use tooling::*;
 
 /// The folder (beside the library file) that holds this service's state.
@@ -130,6 +134,22 @@ struct Inner {
     /// Tools SUL started and is waiting for, by the number it gave each.
     running: BTreeMap<u64, tooling::Following>,
     next_run: u64,
+    /// Starts and follows the games of the Play panel, through the same launcher the tools use.
+    runtime: RuntimeManager,
+}
+
+/// One launcher handed to two users (the Tools tab and the Play panel). Whatever the caller gave starts both, so a
+/// service made without a launcher starts neither.
+#[derive(Clone)]
+struct SharedLauncher(Arc<Mutex<Box<dyn ProcessLauncher + Send>>>);
+
+impl ProcessLauncher for SharedLauncher {
+    fn start(&self, spec: &crate::process::ProcessSpec) -> Result<Box<dyn crate::process::Child>> {
+        let l = self.0.lock().map_err(|_| {
+            Error::Invalid("the program launcher stopped working; restart the app".into())
+        })?;
+        l.start(spec)
+    }
 }
 
 pub struct ManagerService {
@@ -176,6 +196,16 @@ impl ManagerService {
         adapters: AdapterRegistry,
         launcher: Box<dyn ProcessLauncher + Send>,
     ) -> Result<Self> {
+        let shared = SharedLauncher(Arc::new(Mutex::new(launcher)));
+        let mut runtime = RuntimeManager::new(
+            Box::new(shared.clone()),
+            ProtectedRoots::new(),
+            &dir.join("launch-logs"),
+        );
+        // A launch log that cannot be opened is not a reason to refuse to start: launches are still recorded in memory.
+        if let Ok(logger) = Logger::open(&dir.join("launch-events.jsonl")) {
+            runtime = runtime.with_logger(logger);
+        }
         Ok(Self {
             inner: Mutex::new(Inner {
                 roots: LibraryRoots::load(&dir.join("roots.json"))?,
@@ -189,9 +219,10 @@ impl ManagerService {
                 recipes: RecipeBook::open(&dir.join("recipes.json"))?,
                 adapters,
                 tools: ToolRegistry::open(&dir.join("tools.json"))?,
-                launcher,
+                launcher: Box::new(shared),
                 running: BTreeMap::new(),
                 next_run: 1,
+                runtime,
             }),
         })
     }
@@ -406,6 +437,9 @@ fn protect(g: &mut Inner, dir: &Path) -> Result<()> {
     let canonical = dir.canonicalize().map_err(crate::error::io(dir))?;
     if g.protected_dirs.insert(canonical) {
         g.protected.add(dir)?;
+        // The launch manager writes diagnostic logs, so it must know every protected location too.
+        let protected = g.protected.clone();
+        g.runtime.set_protected(protected);
     }
     Ok(())
 }

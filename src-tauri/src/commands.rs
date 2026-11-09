@@ -13,10 +13,10 @@ use sul_core::adapters::AdapterRegistry;
 use sul_core::builder::recipe::{Recipe, RunPlan, RunRecord};
 use sul_core::builder::tools::{StoredRunRecords, ToolRunPlan};
 use sul_core::manager::{
-    BuildSource, BuilderView, BuiltView, Deployed, ManagerService, ManagerView, ModFileList,
-    ModSource, ModVerified, ModsView, ProfileEdit, Purged, PurgedAndDeployed, RecipeRan,
-    STATE_FOLDER, ToolChecked, ToolPolled, ToolRegisterRequest, ToolRunRequest, ToolStarted,
-    ToolsView, Undone, VerifiedView, WorkspaceRef,
+    BuildSource, BuilderView, BuiltView, Deployed, LaunchView, ManagerService, ManagerView,
+    ModFileList, ModSource, ModVerified, ModsView, ProfileEdit, Purged, PurgedAndDeployed,
+    RecipeRan, Refreshed, STATE_FOLDER, Started, ToolChecked, ToolPolled, ToolRegisterRequest,
+    ToolRunRequest, ToolStarted, ToolsView, Undone, VerifiedView, WorkspaceRef,
 };
 use sul_core::manifest::{Variant, VerifyReport};
 use sul_core::mods::deploy::{DeployPlan, PurgePlan};
@@ -740,6 +740,39 @@ pub async fn tools_run_records(
             .map_err(|e| e.to_string())
     })
     .await
+}
+
+/// The builds the Play panel can offer, whether each game has an adapter, what is running and the last launches.
+/// Reads only: it does not ask a running program whether it ended.
+#[tauri::command]
+pub async fn launch_view(state: State<'_, AppState>) -> Result<LaunchView, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.launch_view().map_err(|e| e.to_string())).await
+}
+
+/// Start a build SUL knows, through its game's adapter. A refusal (no adapter, not ready, already running, a program
+/// that no longer matches its record) comes back as a record with the reason, not as an error. `capture_output` keeps
+/// the program's output, capped and with secrets masked, in a log file of its own.
+#[tauri::command]
+pub async fn launch_start(
+    build_id: String,
+    capture_output: bool,
+    state: State<'_, AppState>,
+) -> Result<Started, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .launch_start(&build_id, capture_output)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Ask every running game whether it ended; returns the ones that did and the view after.
+#[tauri::command]
+pub async fn launch_refresh(state: State<'_, AppState>) -> Result<Refreshed, String> {
+    let app = state.inner().clone();
+    blocking(move || app.manager()?.launch_refresh().map_err(|e| e.to_string())).await
 }
 
 #[cfg(test)]

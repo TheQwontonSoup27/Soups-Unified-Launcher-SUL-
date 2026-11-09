@@ -329,6 +329,12 @@ fn every_command_the_page_knows_is_reachable() {
             "tools_run_records",
             json!({ "workspace": { "recipe_id": "r", "root_id": "x", "run_id": "run" } }),
         ),
+        ("launch_view", json!({})),
+        (
+            "launch_start",
+            json!({ "buildId": "x", "captureOutput": false }),
+        ),
+        ("launch_refresh", json!({})),
     ] {
         // Whatever the answer is, it must not be Tauri's "not registered" refusal.
         let answer = format!("{:?}", shell.call(cmd, args));
@@ -2129,4 +2135,250 @@ fn tool_refusals_reach_the_page_as_text_and_the_arguments_must_be_camel_case() {
         )
         .unwrap_err();
     assert!(bad.as_str().unwrap().contains("settings"), "{bad}");
+}
+
+// ---- Slice D1: the Play panel's commands (launch_view, launch_start, launch_refresh) ----
+
+/// As `TinyAdapter`, but it can say how to start the game: its program is `game.exe` in the build folder.
+struct PlayableAdapter;
+
+impl GameAdapter for PlayableAdapter {
+    fn id(&self) -> &str {
+        "gog-1"
+    }
+    fn display_name(&self) -> &str {
+        "Made-up Game"
+    }
+    fn version(&self) -> &str {
+        "0.0-test"
+    }
+    fn recognise(&self, _folder: &std::path::Path) -> sul_core::Result<Recognition> {
+        Ok(Recognition::not_this_game(
+            "a test adapter recognises nothing",
+        ))
+    }
+    fn launch_plan(&self, _dir: &std::path::Path, _v: &str) -> sul_core::Result<LaunchPlan> {
+        Ok(LaunchPlan {
+            exe: "game.exe".into(),
+            args: vec!["--list".into()],
+            working_dir: String::new(),
+            env: vec![],
+            explanation: "--list asks the test program to print its tests and stop.".into(),
+        })
+    }
+    fn mod_layout(&self) -> ModLayout {
+        ModLayout {
+            allowed_prefixes: vec!["data".into(), "mods".into()],
+            forbidden_prefixes: vec![],
+            case_insensitive: true,
+        }
+    }
+    fn capabilities(&self) -> Vec<CapabilityEntry> {
+        vec![]
+    }
+}
+
+fn playable_adapters() -> AdapterRegistry {
+    let mut a = AdapterRegistry::new();
+    a.register(Box::new(PlayableAdapter)).unwrap();
+    a
+}
+
+const LAUNCH_VIEW_KEYS: [&str; 3] = ["builds", "games", "history"];
+
+#[test]
+fn the_launch_view_has_exactly_the_fields_the_page_reads() {
+    let empty = shell(vec![]).call("launch_view", json!({})).unwrap();
+    assert_eq!(keys(&empty), LAUNCH_VIEW_KEYS);
+    for k in LAUNCH_VIEW_KEYS {
+        assert_eq!(empty[k], json!([]), "{k}");
+    }
+
+    let (shell, _install, build, _src) = mods_shell(playable_adapters());
+    let view = shell.call("launch_view", json!({})).unwrap();
+    assert_eq!(keys(&view), LAUNCH_VIEW_KEYS);
+    let b = &view["builds"][0];
+    assert_eq!(
+        keys(b),
+        [
+            "active",
+            "build_id",
+            "game_id",
+            "has_adapter",
+            "managed",
+            "slot",
+            "state"
+        ]
+    );
+    assert_eq!(b["build_id"], json!(build));
+    assert_eq!(b["game_id"], json!("gog-1"));
+    assert_eq!(b["state"], json!("ready"));
+    assert_eq!(b["managed"], json!(true));
+    assert_eq!(b["has_adapter"], json!(true));
+    assert_eq!(keys(&view["games"][0]), ["game_id", "state"]);
+    assert_eq!(view["games"][0]["state"], json!({ "state": "not_running" }));
+    assert_eq!(view["history"], json!([]));
+}
+
+#[test]
+fn with_no_adapter_a_build_is_refused_through_the_command_and_nothing_is_started() {
+    // The real app registers no adapter, so this is what Play does for every real game today.
+    let (shell, _install, build, _src) = mods_shell(AdapterRegistry::new());
+    assert_eq!(
+        shell.call("launch_view", json!({})).unwrap()["builds"][0]["has_adapter"],
+        json!(false)
+    );
+    let answer = shell
+        .call(
+            "launch_start",
+            json!({ "buildId": build, "captureOutput": false }),
+        )
+        .unwrap();
+    assert_eq!(keys(&answer), ["record", "view"]);
+    let record = &answer["record"];
+    assert_eq!(
+        keys(record),
+        [
+            "build_id",
+            "ended_unix",
+            "game_id",
+            "launch_id",
+            "log_file",
+            "outcome",
+            "started_unix",
+            "warnings"
+        ]
+    );
+    assert_eq!(record["outcome"]["kind"], json!("not_started"));
+    assert_eq!(record["outcome"]["why"], json!({ "reason": "no_adapter" }));
+    assert!(
+        record["outcome"]["explanation"]
+            .as_str()
+            .unwrap()
+            .contains("no adapter registered")
+    );
+    assert!(shell.launched.started.lock().unwrap().is_empty());
+    assert_eq!(answer["view"]["history"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        answer["view"]["games"][0]["state"]["state"],
+        json!("last_not_started")
+    );
+}
+
+#[test]
+fn a_build_is_started_followed_and_reported_when_it_ends_through_the_commands() {
+    let (shell, install, build, _src) = mods_shell(playable_adapters());
+    shell.launched.scripts.lock().unwrap().push_back((1, 0));
+    let started = shell
+        .call(
+            "launch_start",
+            json!({ "buildId": build, "captureOutput": false }),
+        )
+        .unwrap();
+    assert_eq!(started["record"]["outcome"]["kind"], json!("running"));
+    assert_eq!(started["record"]["outcome"]["pid"], json!(7777));
+    assert_eq!(
+        started["view"]["games"][0]["state"]["state"],
+        json!("running")
+    );
+    assert_eq!(
+        started["view"]["games"][0]["state"]["build_id"],
+        json!(build)
+    );
+    {
+        let spec = shell.launched.started.lock().unwrap();
+        assert_eq!(spec.len(), 1);
+        assert!(spec[0].exe.ends_with("game.exe"));
+        assert!(
+            !spec[0].exe.starts_with(&install),
+            "the managed copy's program, never the original install's"
+        );
+        assert_eq!(spec[0].capture_bytes, None);
+    }
+
+    // Reading does not poll, however often it is read.
+    for _ in 0..3 {
+        let v = shell.call("launch_view", json!({})).unwrap();
+        assert_eq!(v["games"][0]["state"]["state"], json!("running"));
+    }
+    let first = shell.call("launch_refresh", json!({})).unwrap();
+    assert_eq!(keys(&first), ["finished", "view"]);
+    assert_eq!(first["finished"], json!([]));
+    let second = shell.call("launch_refresh", json!({})).unwrap();
+    assert_eq!(second["finished"].as_array().unwrap().len(), 1);
+    let done = &second["finished"][0];
+    assert_eq!(done["outcome"]["kind"], json!("exited"));
+    assert_eq!(done["outcome"]["code"], json!(0));
+    assert_eq!(done["outcome"]["success"], json!(true));
+    assert_eq!(
+        second["view"]["games"][0]["state"]["state"],
+        json!("last_exited")
+    );
+    assert_eq!(second["view"]["history"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn a_second_start_of_a_running_game_is_refused_with_the_running_builds_name() {
+    let (shell, _install, build, _src) = mods_shell(playable_adapters());
+    shell.launched.scripts.lock().unwrap().push_back((100, 0));
+    let args = json!({ "buildId": build, "captureOutput": false });
+    shell.call("launch_start", args.clone()).unwrap();
+    let again = shell.call("launch_start", args).unwrap();
+    let why = &again["record"]["outcome"];
+    assert_eq!(why["kind"], json!("not_started"));
+    assert_eq!(
+        why["why"],
+        json!({ "reason": "already_running", "build_id": build })
+    );
+    assert_eq!(shell.launched.started.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn asking_for_output_sets_a_cap_on_what_the_program_may_leave_and_not_asking_sets_none() {
+    let (shell, _install, build, _src) = mods_shell(playable_adapters());
+    shell
+        .call(
+            "launch_start",
+            json!({ "buildId": build, "captureOutput": true }),
+        )
+        .unwrap();
+    assert!(
+        shell.launched.started.lock().unwrap()[0]
+            .capture_bytes
+            .is_some()
+    );
+}
+
+#[test]
+fn launch_refusals_reach_the_page_as_text_and_the_arguments_must_be_camel_case() {
+    let (shell, _install, build, _src) = mods_shell(playable_adapters());
+    let refused = |cmd: &str, args: Value, needle: &str| {
+        let e = shell.call(cmd, args).unwrap_err();
+        assert!(e.as_str().unwrap().contains(needle), "{cmd}: {e}");
+    };
+    refused(
+        "launch_start",
+        json!({ "buildId": "  ", "captureOutput": false }),
+        "pick a build",
+    );
+    // snake_case arguments are not read: the command names what is missing.
+    refused(
+        "launch_start",
+        json!({ "build_id": build, "capture_output": false }),
+        "buildId",
+    );
+    refused("launch_start", json!({ "buildId": build }), "captureOutput");
+    assert!(shell.launched.started.lock().unwrap().is_empty());
+
+    // An unknown build is an answer, not an error: the record says there is no such build.
+    let ghost = shell
+        .call(
+            "launch_start",
+            json!({ "buildId": "ghost-1", "captureOutput": false }),
+        )
+        .unwrap();
+    assert_eq!(
+        ghost["record"]["outcome"]["why"],
+        json!({ "reason": "no_such_build" })
+    );
 }

@@ -161,3 +161,33 @@ Calls made while building it (all inside the plan; say so if any should change):
 Still open from this slice: no cancel, no timeout and no confinement for a started program; no real tool was ever run; nothing removes or renames a recorded
 tool or a record; folders and program paths are typed, not picked; a run's workspace folder cannot be deleted from the app. Slice D (launch, catalogue,
 game detail) is not built.
+
+## Slice D1, built 2026-11-08 (launch and runtime)
+
+Slice D was split into D1 (launch and runtime) and D2 (catalogue and game detail), so each could be tested and pushed on its own. This is D1. What was built, as
+planned: the launch half of `ManagerService` (`manager/playing.rs`: `launch_view`, `launch_start`, `launch_refresh`) over the `RuntimeManager` that already existed;
+three commands (`launch_view`, `launch_start`, `launch_refresh`); and `ui/src/lib/playing.ts` with `ui/src/components/PlayPanel.tsx`, shown on the Game Library
+page under the managed-builds panel.
+
+Calls made while building it (all inside the plan; say so if any should change):
+
+- **One launcher, shared.** The Tools panel and the Play panel start programs through the same launcher object (`SharedLauncher`, a clone of one
+  `Arc<Mutex<Box<dyn ProcessLauncher + Send>>>`). The app's constructor gives it the real launcher; every other constructor, including the tests', starts nothing.
+- **The runtime is told about protected locations too.** `protect()` already told the service's own checks; it now also calls `RuntimeManager::set_protected`, so a
+  program's output log is never written into a location protected after the manager was made.
+- **A refusal is a record, not an error.** The core answers a refused start with a launch record whose outcome is `not_started` and its own sentence. The
+  commands pass that record through, the page shows the sentence as the error and keeps the record in the history. The page decides no rule itself; its hold
+  on the Play button (no adapter, build not ready, game already running) only saves a press, and the core decides again when it is pressed.
+- **No confirmation question.** Play changes no file: it starts only the program the game's adapter names, inside a build that was checked. The question
+  dialog is for actions that change or delete files.
+- **Following a running game.** While one runs, the page asks every two seconds whether it has ended. A poll is skipped while a start or an earlier poll is
+  still open; a failed poll is shown and the view is kept. A launch that ended while the page was open is reported once.
+- **Output is opt-in.** The box "Keep the program's output in a log file" is off by default; when ticked the output is capped, passed through the redactor and
+  written to the launch-logs folder, and the history row names the file.
+- **The history is in memory.** The core keeps the last few dozen launches; the page shows the newest 25 and says how many are older. It does not survive closing
+  the app.
+- **The Steam Play button on a game card is unchanged** and is a different path (`launch_game_command`).
+
+Still open from this slice: **no adapter exists for any real game, so Play is refused for every real game**; the game-file risk policy (`trust::policy`) is not
+connected to launch; SUL cannot stop a program it started; the history is not kept across runs; nothing was run in a real window or with a real program. Slice D2
+(catalogue and game detail) is not built.
