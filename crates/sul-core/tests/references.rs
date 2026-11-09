@@ -8,8 +8,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The links the owner sent on 2026-11-05. Each must stay in the list with its status.
-const OWNER_LINKS: [&str; 8] = [
+/// The links the owner sent (eight on 2026-11-05, ten on 2026-11-09). Each must stay in the list with its status and a
+/// plain description of what it is and does.
+const OWNER_LINKS: [&str; 18] = [
     "https://github.com/morluto/rea",
     "https://github.com/Zagitta/gpu-unlock",
     "https://github.com/Raphire/Win11Debloat",
@@ -18,6 +19,16 @@ const OWNER_LINKS: [&str; 8] = [
     "https://github.com/yuliskov/SmartTube/releases",
     "https://github.com/ReVanced/revanced-manager",
     "https://github.com/pi-hole/pi-hole",
+    "https://github.com/yt-dlp/yt-dlp",
+    "https://github.com/ollama/ollama",
+    "https://github.com/immich-app/immich",
+    "https://github.com/openai/whisper",
+    "https://github.com/plausible/analytics",
+    "https://github.com/appflowy-io/appflowy",
+    "https://github.com/penpot/penpot",
+    "https://github.com/n8n-io",
+    "https://github.com/calendly",
+    "https://gist.github.com/aamiaa/204cd9d42013ded9faf646fae7f89fbb",
 ];
 
 /// Addresses that are made-up examples or local development addresses. They are described in section 8 of the list and
@@ -188,6 +199,28 @@ fn the_owner_links_are_listed_with_a_status_and_none_is_called_investigated() {
         assert!(
             !line.contains("Supported and tested"),
             "{link} must not be claimed as tested: {line}"
+        );
+    }
+}
+
+#[test]
+fn every_owner_link_row_has_a_plain_description_of_what_it_is_and_does() {
+    let list = references();
+    for link in OWNER_LINKS {
+        let line = list
+            .lines()
+            .find(|l| l.starts_with('|') && l.contains(link))
+            .unwrap_or_else(|| panic!("{link} has no table row in docs/references.md"));
+        // | Link | tagline | What it is and does | Licence | Status | Notes for SUL |
+        let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+        assert_eq!(
+            cells.len(),
+            8,
+            "{link}: the row must have the six columns of its table: {line}"
+        );
+        assert!(
+            cells[3].chars().count() >= 60,
+            "{link} needs a plain description of what it is and does (column 3): {line}"
         );
     }
 }
