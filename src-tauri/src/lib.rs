@@ -168,6 +168,10 @@ fn handlers<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         commands::launch_view,
         commands::launch_start,
         commands::launch_refresh,
+        commands::catalogue_view,
+        commands::game_detail,
+        commands::catalogue_set_categories,
+        commands::catalogue_set_artwork,
     ]
 }
 

@@ -29,6 +29,7 @@ use crate::builds::{
     ActiveSlot, BuildCheck, BuildRecord, BuildRegistry, Ctx, ImportRequest, RegisterRequest,
     RetiredCopy,
 };
+use crate::catalogue::Catalogue;
 use crate::fsops::ProtectedRoots;
 use crate::journal::Journal;
 use crate::logging::Logger;
@@ -41,10 +42,12 @@ use crate::runtime::RuntimeManager;
 use crate::{Error, Result};
 
 mod building;
+mod cataloguing;
 mod modding;
 mod playing;
 mod tooling;
 pub use building::*;
+pub use cataloguing::*;
 pub use modding::*;
 pub use playing::*;
 pub use tooling::*;
@@ -136,6 +139,8 @@ struct Inner {
     next_run: u64,
     /// Starts and follows the games of the Play panel, through the same launcher the tools use.
     runtime: RuntimeManager,
+    /// The categories and artwork references the owner gave each game (spec 1.1).
+    catalogue: Catalogue,
 }
 
 /// One launcher handed to two users (the Tools tab and the Play panel). Whatever the caller gave starts both, so a
@@ -223,6 +228,7 @@ impl ManagerService {
                 running: BTreeMap::new(),
                 next_run: 1,
                 runtime,
+                catalogue: Catalogue::open(&dir.join("catalogue.json"))?,
             }),
         })
     }

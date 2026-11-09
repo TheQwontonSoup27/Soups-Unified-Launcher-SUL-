@@ -149,3 +149,14 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .preview-list { list-style:none; margin:8px 0; padding:0; max-height:260px; overflow:auto; font-size:13px; }
 .preview-list li { padding:3px 0; overflow-wrap:anywhere; }
 .preview-list .left-alone { font-weight:700; }
+
+/* Categories and game details (spec 1.1). Existing tokens only. */
+.btn-ghost[aria-pressed="true"] { background:var(--button); color:var(--button-text); border-color:#000; }
+.game-detail { margin-top:6px; border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+.game-detail h4 { margin:0; } .game-detail p { margin:0; } .game-detail code { overflow-wrap:anywhere; }
+.game-detail .field { display:flex; flex-direction:column; gap:4px; font-size:13px; flex:1 1 180px; min-width:0; }
+.game-detail .row { align-items:flex-end; }
+.game-detail input[type=text] { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; font:inherit; width:100%; box-sizing:border-box; }
+.game-detail .tag-list { display:flex; flex-wrap:wrap; gap:8px; list-style:none; margin:0 0 8px; padding:0; }
+.game-detail .tag-list li { display:inline-flex; align-items:center; gap:6px; }
+.game-detail .tag-list .btn { padding:2px 8px; font-size:12px; }

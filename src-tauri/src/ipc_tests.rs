@@ -335,6 +335,16 @@ fn every_command_the_page_knows_is_reachable() {
             json!({ "buildId": "x", "captureOutput": false }),
         ),
         ("launch_refresh", json!({})),
+        ("catalogue_view", json!({})),
+        ("game_detail", json!({ "gameId": "x" })),
+        (
+            "catalogue_set_categories",
+            json!({ "gameId": "x", "categories": [] }),
+        ),
+        (
+            "catalogue_set_artwork",
+            json!({ "gameId": "x", "path": null }),
+        ),
     ] {
         // Whatever the answer is, it must not be Tauri's "not registered" refusal.
         let answer = format!("{:?}", shell.call(cmd, args));
@@ -2380,5 +2390,257 @@ fn launch_refusals_reach_the_page_as_text_and_the_arguments_must_be_camel_case()
     assert_eq!(
         ghost["record"]["outcome"]["why"],
         json!({ "reason": "no_such_build" })
+    );
+}
+
+// ---- Slice D2: the catalogue and the game detail (catalogue_view, game_detail, catalogue_set_categories, catalogue_set_artwork) ----
+
+const DETAIL_KEYS: [&str; 10] = [
+    "adapter",
+    "artwork",
+    "builds",
+    "capability",
+    "capability_label",
+    "categories",
+    "display_name",
+    "game_id",
+    "launch",
+    "notes",
+];
+
+fn text_of(e: &Value) -> &str {
+    e.as_str().unwrap_or_else(|| panic!("not text: {e}"))
+}
+
+#[test]
+fn the_catalogue_view_and_the_detail_have_exactly_the_fields_the_page_reads() {
+    let empty = shell(vec![]).call("catalogue_view", json!({})).unwrap();
+    assert_eq!(keys(&empty), ["categories", "entries"]);
+    assert_eq!(empty["categories"], json!([]));
+    assert_eq!(empty["entries"], json!([]));
+
+    let shell = shell(steam_and_gog());
+    let d = shell
+        .call("game_detail", json!({ "gameId": "gog-1" }))
+        .unwrap();
+    assert_eq!(keys(&d), DETAIL_KEYS);
+    // The name is the library's, and a game with no adapter and no build says so in words.
+    assert_eq!(d["game_id"], json!("gog-1"));
+    assert_eq!(d["display_name"], json!("Alpha"));
+    assert_eq!(d["categories"], json!([]));
+    assert_eq!(d["artwork"], Value::Null);
+    assert_eq!(d["adapter"], Value::Null);
+    assert_eq!(d["builds"], json!([]));
+    assert_eq!(d["capability"], json!("not_investigated"));
+    assert_eq!(d["capability_label"], json!("Not investigated"));
+    assert_eq!(d["launch"], json!({ "state": "not_running" }));
+    let notes: Vec<&str> = d["notes"].as_array().unwrap().iter().map(text_of).collect();
+    assert!(notes.iter().any(|n| n.contains("No adapter")), "{notes:?}");
+    assert!(notes.iter().any(|n| n.contains("no build")), "{notes:?}");
+}
+
+#[test]
+fn a_game_with_a_build_and_an_adapter_shows_both_in_its_detail() {
+    let (shell, _install, build, _src) = mods_shell(playable_adapters());
+    let d = shell
+        .call("game_detail", json!({ "gameId": "gog-1" }))
+        .unwrap();
+    assert_eq!(keys(&d), DETAIL_KEYS);
+    assert_eq!(keys(&d["adapter"]), ["id", "version"]);
+    assert_eq!(d["adapter"]["id"], json!("gog-1"));
+    let b = &d["builds"][0];
+    assert_eq!(keys(b), ["active", "build_id", "managed", "slot", "state"]);
+    assert_eq!(b["build_id"], json!(build));
+    assert_eq!(b["state"], json!("ready"));
+    assert_eq!(b["managed"], json!(true));
+    // Importing does not make the build active; the detail says so until it is.
+    assert_eq!(b["active"], json!(false));
+    assert!(
+        d["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| text_of(n).contains("None of this game's builds is active"))
+    );
+    shell
+        .call("manager_activate_build", json!({ "buildId": build }))
+        .unwrap();
+    let d = shell
+        .call("game_detail", json!({ "gameId": "gog-1" }))
+        .unwrap();
+    assert_eq!(d["builds"][0]["active"], json!(true));
+}
+
+#[test]
+fn categories_set_through_the_command_come_back_with_the_detail_and_the_view() {
+    let shell = shell(steam_and_gog());
+    let e = shell
+        .call(
+            "catalogue_set_categories",
+            json!({ "gameId": "gog-1", "categories": ["RPG", " co-op ", "rpg"] }),
+        )
+        .unwrap();
+    assert_eq!(keys(&e), ["detail", "view"]);
+    assert_eq!(keys(&e["detail"]), DETAIL_KEYS);
+    assert_eq!(e["detail"]["categories"], json!(["RPG", "co-op"]));
+    let view = &e["view"];
+    assert_eq!(keys(view), ["categories", "entries"]);
+    assert_eq!(keys(&view["categories"][0]), ["count", "game_ids", "name"]);
+    assert_eq!(keys(&view["entries"][0]), ["categories", "game_id"]);
+    assert_eq!(view["categories"][0]["name"], json!("co-op"));
+    assert_eq!(view["categories"][1]["name"], json!("RPG"));
+    assert_eq!(view["categories"][1]["game_ids"], json!(["gog-1"]));
+    assert_eq!(&shell.call("catalogue_view", json!({})).unwrap(), view);
+    // Another game takes the same category; the library's order (Helldivers 2 first) decides the order of the ids.
+    let both = shell
+        .call(
+            "catalogue_set_categories",
+            json!({ "gameId": "steam-553850", "categories": ["rpg"] }),
+        )
+        .unwrap();
+    let rpg = both["view"]["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == json!("RPG"))
+        .unwrap();
+    assert_eq!(rpg["count"], json!(2));
+    assert_eq!(rpg["game_ids"].as_array().unwrap().len(), 2);
+    // A bad name is refused in words and nothing changes.
+    let refused = shell
+        .call(
+            "catalogue_set_categories",
+            json!({ "gameId": "gog-1", "categories": ["fine", "  "] }),
+        )
+        .unwrap_err();
+    assert!(text_of(&refused).contains("category"), "{refused}");
+    assert_eq!(
+        shell.call("catalogue_view", json!({})).unwrap(),
+        both["view"]
+    );
+}
+
+#[test]
+fn a_game_the_library_does_not_list_is_refused_by_every_command_that_names_one() {
+    let shell = shell(steam_and_gog());
+    for (cmd, args) in [
+        ("game_detail", json!({ "gameId": "ghost" })),
+        (
+            "catalogue_set_categories",
+            json!({ "gameId": "ghost", "categories": ["x"] }),
+        ),
+        (
+            "catalogue_set_artwork",
+            json!({ "gameId": "ghost", "path": null }),
+        ),
+    ] {
+        let e = shell.call(cmd, args).unwrap_err();
+        assert!(
+            text_of(&e).contains("the library has no game"),
+            "{cmd}: {e}"
+        );
+    }
+    // No entry was made for a name nobody has seen.
+    assert_eq!(
+        shell.call("catalogue_view", json!({})).unwrap()["entries"],
+        json!([])
+    );
+}
+
+#[test]
+fn a_game_the_last_scan_did_not_find_can_still_be_labelled() {
+    let (shell, _install, _store) = real_game_shell_with(true, AdapterRegistry::new());
+    let e = shell
+        .call(
+            "catalogue_set_categories",
+            json!({ "gameId": "gog-2", "categories": ["Gone"] }),
+        )
+        .unwrap();
+    assert_eq!(e["detail"]["display_name"], json!("Gone Game"));
+    assert_eq!(e["detail"]["categories"], json!(["Gone"]));
+}
+
+#[test]
+fn artwork_is_referenced_from_a_real_image_file_and_cleared_with_null() {
+    let (shell, _install, _build, src) = mods_shell(AdapterRegistry::new());
+    let base = src.parent().unwrap();
+    let image = base.join("cover.png");
+    std::fs::write(&image, b"only a file with a picture's name").unwrap();
+    let canonical = image.canonicalize().unwrap();
+    let e = shell
+        .call(
+            "catalogue_set_artwork",
+            json!({ "gameId": "gog-1", "path": image.to_str().unwrap() }),
+        )
+        .unwrap();
+    assert_eq!(
+        e["detail"]["artwork"],
+        json!(canonical.to_str().unwrap()),
+        "the detail names the file the reference points at"
+    );
+    assert_eq!(
+        shell
+            .call("game_detail", json!({ "gameId": "gog-1" }))
+            .unwrap()["artwork"],
+        e["detail"]["artwork"]
+    );
+    // Not an image, not there, or blank: refused in words, the reference stays.
+    let text = base.join("notes.txt");
+    std::fs::write(&text, "words").unwrap();
+    for bad in [
+        text.to_str().unwrap(),
+        "   ",
+        base.join("nope.png").to_str().unwrap(),
+    ] {
+        let e = shell
+            .call(
+                "catalogue_set_artwork",
+                json!({ "gameId": "gog-1", "path": bad }),
+            )
+            .unwrap_err();
+        assert!(!text_of(&e).is_empty(), "{bad}: {e}");
+    }
+    assert_eq!(
+        shell
+            .call("game_detail", json!({ "gameId": "gog-1" }))
+            .unwrap()["artwork"],
+        e["detail"]["artwork"]
+    );
+    let cleared = shell
+        .call(
+            "catalogue_set_artwork",
+            json!({ "gameId": "gog-1", "path": null }),
+        )
+        .unwrap();
+    assert_eq!(cleared["detail"]["artwork"], Value::Null);
+    assert!(image.is_file(), "the owner's image is never touched");
+}
+
+#[test]
+fn the_catalogue_arguments_must_be_camel_case_and_the_refusals_are_text() {
+    let shell = shell(steam_and_gog());
+    let refused = |cmd: &str, args: Value, needle: &str| {
+        let e = shell.call(cmd, args).unwrap_err();
+        assert!(text_of(&e).contains(needle), "{cmd}: {e}");
+    };
+    refused("game_detail", json!({ "game_id": "gog-1" }), "gameId");
+    refused(
+        "catalogue_set_categories",
+        json!({ "game_id": "gog-1", "categories": [] }),
+        "gameId",
+    );
+    refused(
+        "catalogue_set_categories",
+        json!({ "gameId": "gog-1" }),
+        "categories",
+    );
+    refused(
+        "catalogue_set_artwork",
+        json!({ "game_id": "gog-1", "path": null }),
+        "gameId",
+    );
+    assert_eq!(
+        shell.call("catalogue_view", json!({})).unwrap()["entries"],
+        json!([])
     );
 }

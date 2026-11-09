@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { MOCK_CAPABILITIES, STATUS_HELP, STATUS_ORDER, weakestStatus } from "../capabilities";
+import { CategoryChips } from "../components/CategoryChips";
+import { GameDetailPanel } from "../components/GameDetailPanel";
 import { GameLibraryGrid } from "../components/GameLibraryGrid";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { ManagedBuildsPanel } from "../components/ManagedBuildsPanel";
 import { PlayPanel } from "../components/PlayPanel";
+import { CatalogueController, applyCategory, categoriesOf, filterSummary, tauriCatalogueApi, type CatalogueApi } from "../lib/catalogue";
 import { LibraryController, filterGames, tauriLibraryApi, type LibraryApi } from "../lib/library";
 import type { ManagerApi } from "../lib/manager";
 import type { PlayApi } from "../lib/playing";
@@ -22,17 +25,38 @@ function headline(game: string): Status {
  * or a test), in which case the page explains that scanning needs the desktop app. `query` is what is
  * typed in the sidebar's search box: only the games that match it are shown. `managerApi` is the backend of the
  * folders-and-builds panel and `playApi` the backend of the Play panel; when a test hands the page a fake library
- * backend and no manager or play backend, that panel gets none rather than reaching for the real one.
+ * backend and no manager or play backend, that panel gets none rather than reaching for the real one. `catalogueApi` is the
+ * backend of the categories and the game details, treated the same way.
  */
-export default function GameLibrary({ api, managerApi, playApi, query = "" }: { api?: LibraryApi | null; managerApi?: ManagerApi | null; playApi?: PlayApi | null; query?: string }) {
+export default function GameLibrary({
+  api,
+  managerApi,
+  playApi,
+  catalogueApi,
+  query = "",
+}: {
+  api?: LibraryApi | null;
+  managerApi?: ManagerApi | null;
+  playApi?: PlayApi | null;
+  catalogueApi?: CatalogueApi | null;
+  query?: string;
+}) {
   const controller = useMemo(() => new LibraryController(api === undefined ? tauriLibraryApi() : api), [api]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
-  const searching = query.trim() !== "" && state.games.length > 0;
-  const shown = useMemo(() => filterGames(state.games, query), [state.games, query]);
+  const catalogue = useMemo(() => new CatalogueController(catalogueApi === undefined ? (api === undefined ? tauriCatalogueApi() : null) : catalogueApi), [catalogueApi, api]);
+  const cat = useSyncExternalStore(catalogue.subscribe, catalogue.getSnapshot, catalogue.getSnapshot);
+  const shown = useMemo(() => applyCategory(filterGames(state.games, query), cat.view, cat.selected), [state.games, query, cat.view, cat.selected]);
+  const summary = state.games.length > 0 ? filterSummary(query, cat.selected, shown.length, state.games.length) : null;
 
   useEffect(() => {
     void controller.load();
   }, [controller]);
+
+  // The category lists depend on which games the library has, so ask again when that set changes (a scan, or the first load).
+  const gameIds = state.games.map((g) => g.id).join("\n");
+  useEffect(() => {
+    void catalogue.load();
+  }, [catalogue, gameIds]);
 
   return (
     <>
@@ -52,10 +76,8 @@ export default function GameLibrary({ api, managerApi, playApi, query = "" }: { 
               ? "Browser preview: scanning needs the desktop app, so no games are listed."
               : state.scanning
                 ? "Scanning the registry, Steam libraries and drives…"
-                : searching
-                  ? shown.length === 0
-                    ? `No games match “${query.trim()}”.`
-                    : `Showing ${shown.length} of ${state.games.length} games matching “${query.trim()}”.`
+                : summary !== null
+                  ? summary
                   : (state.scanSummary ??
                   (state.loaded && state.games.length === 0
                     ? "No games yet. Scan to find the ones installed on this computer."
@@ -78,7 +100,28 @@ export default function GameLibrary({ api, managerApi, playApi, query = "" }: { 
         </p>
       )}
 
-      <GameLibraryGrid state={{ ...state, games: shown }} actions={controller} />
+      {cat.error && (
+        <p className="card matrix-error" role="alert">
+          {cat.error}
+        </p>
+      )}
+
+      <CategoryChips view={cat.view} selected={cat.selected} total={state.games.length} onSelect={(c) => catalogue.select(c)} />
+
+      <GameLibraryGrid
+        state={{ ...state, games: shown }}
+        actions={controller}
+        catalogue={
+          catalogue.hasBackend
+            ? {
+                categoriesOf: (id) => categoriesOf(cat.view, id),
+                openId: cat.openId,
+                onToggleDetails: (game) => void catalogue.open(game.id),
+                panel: (game) => <GameDetailPanel key={game.id} controller={catalogue} state={cat} name={game.name} />,
+              }
+            : undefined
+        }
+      />
 
       <ManagedBuildsPanel api={managerApi === undefined && api !== undefined ? null : managerApi} games={state.games} />
 

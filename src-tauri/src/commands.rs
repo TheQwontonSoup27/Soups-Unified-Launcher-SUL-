@@ -12,11 +12,13 @@ use std::sync::Arc;
 use sul_core::adapters::AdapterRegistry;
 use sul_core::builder::recipe::{Recipe, RunPlan, RunRecord};
 use sul_core::builder::tools::{StoredRunRecords, ToolRunPlan};
+use sul_core::catalogue::GameDetail;
 use sul_core::manager::{
-    BuildSource, BuilderView, BuiltView, Deployed, LaunchView, ManagerService, ManagerView,
-    ModFileList, ModSource, ModVerified, ModsView, ProfileEdit, Purged, PurgedAndDeployed,
-    RecipeRan, Refreshed, STATE_FOLDER, Started, ToolChecked, ToolPolled, ToolRegisterRequest,
-    ToolRunRequest, ToolStarted, ToolsView, Undone, VerifiedView, WorkspaceRef,
+    BuildSource, BuilderView, BuiltView, CatalogueView, Deployed, Edited, GameRef, LaunchView,
+    ManagerService, ManagerView, ModFileList, ModSource, ModVerified, ModsView, ProfileEdit,
+    Purged, PurgedAndDeployed, RecipeRan, Refreshed, STATE_FOLDER, Started, ToolChecked,
+    ToolPolled, ToolRegisterRequest, ToolRunRequest, ToolStarted, ToolsView, Undone, VerifiedView,
+    WorkspaceRef,
 };
 use sul_core::manifest::{Variant, VerifyReport};
 use sul_core::mods::deploy::{DeployPlan, PurgePlan};
@@ -149,6 +151,21 @@ impl AppState {
 
     fn games(&self) -> Result<Vec<GameView>, String> {
         Ok(self.library()?.games())
+    }
+
+    /// The games the library lists as `(id, name)`: what the catalogue is told, so the names on its pages are the
+    /// library's and never the page's.
+    fn game_refs(&self) -> Result<Vec<GameRef>, String> {
+        Ok(self.games()?.into_iter().map(|g| (g.id, g.name)).collect())
+    }
+
+    /// One game the library lists. A game the library does not list is refused, so no catalogue entry is ever made
+    /// for a name nobody has seen.
+    fn game_ref(&self, game_id: &str) -> Result<GameRef, String> {
+        self.game_refs()?
+            .into_iter()
+            .find(|(id, _)| id == game_id)
+            .ok_or_else(|| format!("the library has no game {game_id:?}"))
     }
 
     fn scan(&self) -> Result<ScanView, String> {
@@ -773,6 +790,69 @@ pub async fn launch_start(
 pub async fn launch_refresh(state: State<'_, AppState>) -> Result<Refreshed, String> {
     let app = state.inner().clone();
     blocking(move || app.manager()?.launch_refresh().map_err(|e| e.to_string())).await
+}
+
+/// The categories in use and which games of the library carry them. Reads only.
+#[tauri::command]
+pub async fn catalogue_view(state: State<'_, AppState>) -> Result<CatalogueView, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        app.manager()?
+            .catalogue_view(&app.game_refs()?)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Everything SUL knows about one game of the library: builds, adapter, capability label, launch state, categories,
+/// the artwork reference and plain notes about what is missing. Reads only.
+#[tauri::command]
+pub async fn game_detail(
+    game_id: String,
+    state: State<'_, AppState>,
+) -> Result<GameDetail, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        let game = app.game_ref(&game_id)?;
+        app.manager()?.game_detail(&game).map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Replace a game's categories. The game must be one the library lists. Returns the game's detail and the catalogue
+/// view after the change.
+#[tauri::command]
+pub async fn catalogue_set_categories(
+    game_id: String,
+    categories: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Edited, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        let game = app.game_ref(&game_id)?;
+        app.manager()?
+            .catalogue_set_categories(&game, &app.game_refs()?, &categories)
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+/// Point a game at an image file the owner already has (`path`), or clear the reference (`path` null). The file is
+/// checked and referenced, never copied. Returns the game's detail and the catalogue view after the change.
+#[tauri::command]
+pub async fn catalogue_set_artwork(
+    game_id: String,
+    path: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Edited, String> {
+    let app = state.inner().clone();
+    blocking(move || {
+        let game = app.game_ref(&game_id)?;
+        app.manager()?
+            .catalogue_set_artwork(&game, &app.game_refs()?, path.as_deref())
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[cfg(test)]
