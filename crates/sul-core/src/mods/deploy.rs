@@ -226,6 +226,16 @@ pub fn deployment_of(reg: &BuildRegistry, ctx: &Ctx, build_id: &str) -> Result<O
     Ok(load_state(&target(reg, ctx, build_id)?)?.deployment)
 }
 
+/// The latest purge of a build that can still be undone, if there is one. Read only. It is the record that
+/// [`undo_purge`] accepts: a later deploy, purge or undo makes the earlier one disappear from here.
+pub fn last_purge_of(
+    reg: &BuildRegistry,
+    ctx: &Ctx,
+    build_id: &str,
+) -> Result<Option<PurgeRecord>> {
+    Ok(load_state(&target(reg, ctx, build_id)?)?.last_purge)
+}
+
 /// The deploys and purges of a build, oldest first. Read only.
 pub fn history_of(reg: &BuildRegistry, ctx: &Ctx, build_id: &str) -> Result<Vec<HistoryItem>> {
     Ok(load_state(&target(reg, ctx, build_id)?)?.history)
@@ -1729,6 +1739,30 @@ mod tests {
         assert!(undo_purge(&mut f.reg, &f.w.ctx(), &f.build, &id2).is_err());
         assert_eq!(f.snap(), snap);
         assert_eq!(f.read("data/a.bin"), "AAAA");
+    }
+
+    #[test]
+    fn the_latest_purge_is_readable_until_it_is_undone_or_replaced() {
+        let mut f = fx();
+        two_file_mod(&mut f);
+        let latest = |f: &Fx| last_purge_of(&f.reg, &f.w.ctx(), &f.build).unwrap();
+        assert!(latest(&f).is_none(), "nothing was purged yet");
+        f.deploy().unwrap();
+        assert!(latest(&f).is_none(), "a deploy is not a purge");
+        let id = f.purge().purge_id.unwrap();
+        let rec = latest(&f).expect("the purge can be undone");
+        assert_eq!(rec.id, id);
+        assert_eq!(rec.reverted.len(), 2);
+        assert_eq!(rec.deployment.profile_id, "main");
+        undo_purge(&mut f.reg, &f.w.ctx(), &f.build, &id).unwrap();
+        assert!(
+            latest(&f).is_none(),
+            "an undone purge cannot be undone again"
+        );
+        let second = f.purge().purge_id.unwrap();
+        assert_eq!(latest(&f).unwrap().id, second);
+        // A purge of an install that stays where it is has nothing to read.
+        assert!(last_purge_of(&f.reg, &f.w.ctx(), "no-such-build").is_err());
     }
 
     #[test]

@@ -247,11 +247,16 @@ impl ToolRegistry {
 
     /// The owner confirms that the file now at the recorded path is the tool they mean, at `new_version`. The
     /// old version and hash go into the history.
+    ///
+    /// `seen_sha256` is the hash the owner was shown when they decided. With `Some`, the file is hashed once here and
+    /// the change is refused if that hash is not the one they saw, so a file swapped after they looked is not
+    /// accepted. With `None` whatever file is there now is accepted (the app always passes `Some`).
     pub fn accept_change(
         &mut self,
         protected: &ProtectedRoots,
         id: &str,
         new_version: &str,
+        seen_sha256: Option<&str>,
     ) -> Result<()> {
         validate_text("tool version", new_version, 64)?;
         let i = self
@@ -263,6 +268,14 @@ impl ToolRegistry {
         let before = self.data.tools[i].clone();
         Self::check_exe(protected, &before.exe_path)?;
         let (sha, size) = hash_file(&before.exe_path)?;
+        if let Some(seen) = seen_sha256
+            && seen != sha
+        {
+            return Err(Error::Invalid(
+                "the file is not the one you were shown: it changed again since it was checked; check it again before accepting"
+                    .into(),
+            ));
+        }
         let t = &mut self.data.tools[i];
         t.history.push(ToolHistory {
             version: before.version.clone(),
@@ -519,6 +532,84 @@ pub fn save_run_record(
     ))
 }
 
+/// Most records [`list_run_records`] returns. Chosen here to keep an answer small, not a measured figure.
+pub const MAX_LISTED_RECORDS: usize = 50;
+/// A record file bigger than this is reported and not read. Chosen here, not measured.
+const MAX_RECORD_BYTES: u64 = 4 * 1024 * 1024;
+
+/// A saved record and the name of its file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StoredRunRecord {
+    pub name: String,
+    pub record: ToolRunRecord,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct StoredRunRecords {
+    /// Newest first, at most [`MAX_LISTED_RECORDS`].
+    pub records: Vec<StoredRunRecord>,
+    /// How many record files the folder holds, whether or not they are listed.
+    pub total: usize,
+    /// Files that could not be read as a record, with the reason. They are reported, never skipped silently.
+    pub unreadable: Vec<String>,
+}
+
+/// The records [`save_run_record`] kept in `dir` (the folder it was given). Reads only. A missing folder is no
+/// records; a file that is not a plain file, is too big or is not a record is listed in `unreadable`.
+pub fn list_run_records(dir: &Path) -> Result<StoredRunRecords> {
+    let folder = dir.join(RUN_RECORD_DIR);
+    let mut names = Vec::new();
+    match std::fs::read_dir(&folder) {
+        Ok(rd) => {
+            for e in rd {
+                let e = e.map_err(io(&folder))?;
+                if let Some(n) = e.file_name().to_str()
+                    && n.ends_with(".json")
+                {
+                    names.push(n.to_owned());
+                }
+            }
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(StoredRunRecords::default());
+        }
+        Err(e) => return Err(io(&folder)(e)),
+    }
+    names.sort_by(|a, b| b.cmp(a));
+    let mut out = StoredRunRecords {
+        total: names.len(),
+        ..StoredRunRecords::default()
+    };
+    for name in names {
+        if out.records.len() >= MAX_LISTED_RECORDS {
+            break;
+        }
+        let path = folder.join(&name);
+        let read = || -> std::result::Result<ToolRunRecord, String> {
+            let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+            if !meta.is_file() {
+                return Err("it is not a plain file".into());
+            }
+            if meta.len() > MAX_RECORD_BYTES {
+                return Err("it is too big to be a record".into());
+            }
+            let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            serde_json::from_str(&text).map_err(|e| e.to_string())
+        };
+        match read() {
+            Ok(record) => out.records.push(StoredRunRecord { name, record }),
+            Err(why) => out.unreadable.push(format!("{name}: {why}")),
+        }
+    }
+    out.records.sort_by(|a, b| {
+        b.record
+            .finished_unix
+            .cmp(&a.record.finished_unix)
+            .then_with(|| b.name.cmp(&a.name))
+    });
+    Ok(out)
+}
+
 /// What is known about a tool spec 2.4 names. A finding is not a promise: it says what was read, on what date.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct KnownTool {
@@ -692,7 +783,9 @@ mod tests {
         let mut f = fx();
         let first = f.reg.register(&f.protected, &registration(&f)).unwrap();
         std::fs::write(&f.exe, b"version two").unwrap();
-        f.reg.accept_change(&f.protected, "audio", "2.0").unwrap();
+        f.reg
+            .accept_change(&f.protected, "audio", "2.0", None)
+            .unwrap();
         let now = f.reg.get("audio").unwrap();
         assert_eq!(now.version, "2.0");
         assert_ne!(now.exe_sha256, first.exe_sha256);
@@ -705,7 +798,53 @@ mod tests {
                 .unwrap()
                 .blocked()
         );
-        assert!(f.reg.accept_change(&f.protected, "nope", "1").is_err());
+        assert!(
+            f.reg
+                .accept_change(&f.protected, "nope", "1", None)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn a_change_is_accepted_only_if_the_file_is_the_one_the_owner_was_shown() {
+        let mut f = fx();
+        let first = f.reg.register(&f.protected, &registration(&f)).unwrap();
+        std::fs::write(&f.exe, b"version two").unwrap();
+        let ToolStatus::Changed {
+            exe_sha256: seen, ..
+        } = f.reg.check("audio").unwrap()
+        else {
+            panic!("expected a changed tool");
+        };
+
+        // The file is swapped again after the owner looked: nothing is accepted, nothing is recorded.
+        std::fs::write(&f.exe, b"version three, not the one shown").unwrap();
+        let e = f
+            .reg
+            .accept_change(&f.protected, "audio", "2.0", Some(&seen))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("not the one you were shown"), "{e}");
+        let still = f.reg.get("audio").unwrap();
+        assert_eq!(still.exe_sha256, first.exe_sha256);
+        assert!(still.history.is_empty());
+        assert_eq!(
+            ToolRegistry::open(&f.base.join("state/tools.json"))
+                .unwrap()
+                .get("audio")
+                .unwrap()
+                .exe_sha256,
+            first.exe_sha256,
+            "the saved list is unchanged too"
+        );
+
+        // The file as it was shown is accepted.
+        std::fs::write(&f.exe, b"version two").unwrap();
+        f.reg
+            .accept_change(&f.protected, "audio", "2.0", Some(&seen))
+            .unwrap();
+        assert_eq!(f.reg.get("audio").unwrap().exe_sha256, seen);
+        assert_eq!(f.reg.get("audio").unwrap().history.len(), 1);
     }
 
     #[test]
@@ -790,6 +929,92 @@ mod tests {
         let mut h2 = start_tool_run(&f.reg, &f.protected, &launcher, &spec(&f)).unwrap();
         let rec2 = h2.poll().unwrap().unwrap();
         assert!(rec2.added.is_empty() && rec2.changed.is_empty() && rec2.removed.is_empty());
+    }
+
+    fn a_record(finished: u64, id: &str) -> ToolRunRecord {
+        ToolRunRecord {
+            tool_id: id.into(),
+            tool_version: "1.0".into(),
+            tool_sha256: "ab".repeat(32),
+            args: vec![],
+            env_names: vec![],
+            settings: BTreeMap::new(),
+            started_unix: finished,
+            finished_unix: finished,
+            exit_code: Some(0),
+            success: true,
+            added: vec![],
+            changed: vec![],
+            removed: vec![],
+            comparison_error: None,
+            limits: LIMITS.into(),
+        }
+    }
+
+    #[test]
+    fn saved_records_are_listed_newest_first_and_a_folder_without_any_has_none() {
+        let f = fx();
+        assert_eq!(
+            list_run_records(&f.ws).unwrap(),
+            StoredRunRecords::default()
+        );
+        for (t, id) in [(100, "a"), (300, "c"), (200, "b")] {
+            save_run_record(&f.protected, &f.ws, &a_record(t, id)).unwrap();
+        }
+        let got = list_run_records(&f.ws).unwrap();
+        assert_eq!(got.total, 3);
+        assert!(got.unreadable.is_empty());
+        let order: Vec<(&str, u64)> = got
+            .records
+            .iter()
+            .map(|r| (r.record.tool_id.as_str(), r.record.finished_unix))
+            .collect();
+        assert_eq!(order, [("c", 300), ("b", 200), ("a", 100)]);
+        assert!(got.records[0].name.ends_with(".json"));
+    }
+
+    #[test]
+    fn a_record_file_that_cannot_be_read_is_reported_and_never_hides_the_others() {
+        let f = fx();
+        save_run_record(&f.protected, &f.ws, &a_record(100, "a")).unwrap();
+        let dir = f.ws.join(RUN_RECORD_DIR);
+        std::fs::write(dir.join("999-broken-0.json"), "not json").unwrap();
+        std::fs::write(dir.join("notes.txt"), "ignored: not a .json file").unwrap();
+        std::fs::create_dir(dir.join("998-folder-0.json")).unwrap();
+        let big = std::fs::File::create(dir.join("997-big-0.json")).unwrap();
+        big.set_len(MAX_RECORD_BYTES + 1).unwrap();
+        let got = list_run_records(&f.ws).unwrap();
+        assert_eq!(got.records.len(), 1);
+        assert_eq!(got.total, 4, "the text file is not a record file");
+        assert_eq!(got.unreadable.len(), 3, "{:?}", got.unreadable);
+        let all = got.unreadable.join(" | ");
+        assert!(all.contains("999-broken-0.json"), "{all}");
+        assert!(all.contains("not a plain file"), "{all}");
+        assert!(all.contains("too big"), "{all}");
+        assert!(!all.contains("notes.txt"), "{all}");
+    }
+
+    #[test]
+    fn only_the_newest_records_are_returned_but_all_are_counted() {
+        let f = fx();
+        let dir = f.ws.join(RUN_RECORD_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..(MAX_LISTED_RECORDS + 5) {
+            let rec = a_record(1000 + i as u64, "t");
+            std::fs::write(
+                dir.join(format!("{}-t-0.json", rec.finished_unix)),
+                serde_json::to_string(&rec).unwrap(),
+            )
+            .unwrap();
+        }
+        let got = list_run_records(&f.ws).unwrap();
+        assert_eq!(got.total, MAX_LISTED_RECORDS + 5);
+        assert_eq!(got.records.len(), MAX_LISTED_RECORDS);
+        assert_eq!(
+            got.records[0].record.finished_unix,
+            1000 + MAX_LISTED_RECORDS as u64 + 4
+        );
+        assert_eq!(got.records.last().unwrap().record.finished_unix, 1005);
     }
 
     #[test]

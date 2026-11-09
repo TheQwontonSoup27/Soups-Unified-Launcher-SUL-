@@ -106,8 +106,11 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 @media (prefers-reduced-motion: reduce) { .splash img { animation:none; } }
 
 .scrim { position:fixed; inset:0; z-index:20; background:rgba(0,0,0,.55); display:grid; place-items:center; padding:16px; }
-.dialog { background:var(--popup); color:var(--popup-text); border:2px solid var(--border); border-radius:14px; padding:20px 24px; max-width:420px; width:100%; box-shadow:0 12px 40px rgba(0,0,0,.45); }
-.dialog h3 { margin:0 0 8px; } .dialog-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
+.dialog { background:var(--popup); color:var(--popup-text); border:2px solid var(--border); border-radius:14px; padding:20px 24px; max-width:420px; width:100%; box-shadow:0 12px 40px rgba(0,0,0,.45); display:flex; flex-direction:column; max-height:calc(100vh - 32px); }
+.dialog h3 { margin:0 0 8px; flex-shrink:0; } .dialog-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:14px; flex-shrink:0; }
+/* A long preview scrolls inside the dialog, so its buttons are always on screen. The page's muted green is too faint on the green pop-up. */
+.dialog > h3 + div { overflow-y:auto; min-height:0; }
+.dialog .muted { color:var(--popup-text); }
 
 @media (max-width:760px){ .shell{grid-template-columns:1fr; grid-template-rows:40px auto 1fr;} .titlebar{grid-column:1;} .sidebar{flex-direction:column;max-height:50vh;} .legend div{grid-template-columns:1fr;} .titlebar-note{display:none;} }
 .status { margin-top:auto; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); font-size:12px; }
@@ -128,4 +131,32 @@ button:focus-visible, input:focus-visible { outline:3px solid #fff; outline-offs
 .trust-list { list-style:none; margin:8px 0; padding:0; }
 .trust-list li { padding:10px 0; border-bottom:1px solid var(--border); } .trust-list li:last-child { border-bottom:0; }
 .trust-list li p { margin:6px 0 0; } .trust-title { font-weight:700; }
+.trust-list .steps { margin:6px 0 0; padding-left:22px; } .trust-list .steps li { padding:2px 0; border-bottom:0; }
 
+/* Library folders and managed builds (spec 1.2, 1.3, 1.5). Existing tokens only. */
+.managed { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
+.managed .card { margin:0; }
+.managed code { overflow-wrap:anywhere; }
+.managed .field { display:flex; flex-direction:column; gap:4px; font-size:13px; }
+.managed .row { align-items:flex-end; margin-top:8px; }
+.managed .field input[type=text] { min-width:200px; }
+.managed select { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; min-width:160px; }
+.managed h4 { margin:14px 0 4px; }
+.managed textarea { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; min-width:260px; font:inherit; }
+.managed .profile { border-top:1px solid var(--border); padding-top:8px; margin-top:12px; }
+.managed .profile h4 { margin:6px 0 0; }
+.managed details { margin-top:8px; }
+.preview-list { list-style:none; margin:8px 0; padding:0; max-height:260px; overflow:auto; font-size:13px; }
+.preview-list li { padding:3px 0; overflow-wrap:anywhere; }
+.preview-list .left-alone { font-weight:700; }
+
+/* Categories and game details (spec 1.1). Existing tokens only. */
+.btn-ghost[aria-pressed="true"] { background:var(--button); color:var(--button-text); border-color:#000; }
+.game-detail { margin-top:6px; border-top:1px solid var(--border); padding-top:10px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+.game-detail h4 { margin:0; } .game-detail p { margin:0; } .game-detail code { overflow-wrap:anywhere; }
+.game-detail .field { display:flex; flex-direction:column; gap:4px; font-size:13px; flex:1 1 180px; min-width:0; }
+.game-detail .row { align-items:flex-end; }
+.game-detail input[type=text] { padding:6px 10px; border:1px solid #000; border-radius:6px; background:#fff; color:#111; font:inherit; width:100%; box-sizing:border-box; }
+.game-detail .tag-list { display:flex; flex-wrap:wrap; gap:8px; list-style:none; margin:0 0 8px; padding:0; }
+.game-detail .tag-list li { display:inline-flex; align-items:center; gap:6px; }
+.game-detail .tag-list .btn { padding:2px 8px; font-size:12px; }

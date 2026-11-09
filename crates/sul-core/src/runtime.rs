@@ -166,6 +166,12 @@ impl RuntimeManager {
         }
     }
 
+    /// Replace the protected locations the manager checks before it writes a diagnostic log. The service calls this
+    /// whenever it learns of another original install, so a log is never written into one.
+    pub fn set_protected(&mut self, protected: ProtectedRoots) {
+        self.protected = protected;
+    }
+
     /// Record one structured line per launch event. Argument and environment values are never logged.
     pub fn with_logger(mut self, logger: Logger) -> Self {
         self.logger = Some(logger);
@@ -855,6 +861,42 @@ mod tests {
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(text.contains("started ok") && text.contains("[REDACTED]"));
         assert!(!text.contains("SECRET") && !text.contains("123456"));
+    }
+
+    #[test]
+    fn a_log_is_not_written_into_a_location_protected_after_the_manager_was_made() {
+        let mut r = rig();
+        r.scripts.lock().unwrap().push_back(Script {
+            polls_before_exit: 0,
+            exit: ExitInfo {
+                code: Some(0),
+                success: true,
+            },
+            output: Some("hello".into()),
+        });
+        // The logs folder becomes a protected location (the service learns of another original install).
+        let mut protected = r.w.protected.clone();
+        std::fs::create_dir_all(r.w.base.join("logs")).unwrap();
+        protected.add(&r.w.base.join("logs")).unwrap();
+        r.mgr.set_protected(protected);
+        r.launch(true);
+        let done = r.mgr.refresh().unwrap();
+        assert!(done[0].log_file.is_none(), "{:?}", done[0]);
+        assert!(
+            done[0]
+                .warnings
+                .iter()
+                .any(|w| w.contains("could not be saved")),
+            "{:?}",
+            done[0].warnings
+        );
+        assert!(
+            std::fs::read_dir(r.w.base.join("logs"))
+                .unwrap()
+                .next()
+                .is_none(),
+            "nothing was written into the protected folder"
+        );
     }
 
     #[test]

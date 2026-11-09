@@ -208,6 +208,15 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "saves which updater version was last seen",
     ),
     (
+        "src-tauri/src/ipc_tests.rs",
+        &[
+            "create a folder",
+            "create or overwrite a file",
+            "move or rename",
+        ],
+        "test code only (the whole file is `#[cfg(test)]` in lib.rs, so the scan cannot cut it off): makes made-up game and library folders inside a temporary folder and moves one of them; it deletes nothing, and the temporary folder removes itself",
+    ),
+    (
         "src-tauri/src/lib.rs",
         &["create a folder"],
         "creates the app's own data folder at start-up",

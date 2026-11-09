@@ -41,6 +41,7 @@ pub mod fsys;
 pub mod journal;
 pub mod library;
 pub mod logging;
+pub mod manager;
 pub mod manifest;
 pub mod matrix;
 pub mod mods;

@@ -30,3 +30,21 @@ test("the measurement table's cells wrap and the density strip wraps, so neither
   assert.match(rule(".seg.wrap"), /flex-wrap:\s*wrap/);
 });
 
+
+test("a long preview scrolls inside its dialog so the buttons stay on screen, and the muted text stays readable on the pop-up", () => {
+  // Measured in a real browser, 1280 x 600 window, a 205-file run preview: without these rules the dialog was 9786 px
+  // tall, could not be scrolled, and its Cancel and Build buttons were at y = 9739, out of reach.
+  const dialog = rule(".dialog");
+  assert.match(dialog, /display:\s*flex/);
+  assert.match(dialog, /flex-direction:\s*column/);
+  assert.match(dialog, /max-height:\s*calc\(100vh - 32px\)/);
+  assert.match(rule(".dialog > h3 + div"), /overflow-y:\s*auto/);
+  assert.match(rule(".dialog > h3 + div"), /min-height:\s*0/);
+  assert.match(rule(".dialog-actions"), /flex-shrink:\s*0/);
+  // The page's muted green (#2c4a27) on the green pop-up (#27b014) is about 3.5:1; the pop-up's own text colour is about 7:1.
+  assert.match(rule(".dialog .muted"), /color:\s*var\(--popup-text\)/);
+});
+
+test("the steps of a saved recipe are a plain numbered list without the dividers of the list around them", () => {
+  assert.match(rule(".trust-list .steps li"), /border-bottom:\s*0/);
+});

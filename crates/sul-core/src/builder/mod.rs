@@ -7,6 +7,7 @@
 //!   never changes the original; it refuses a file that is not exactly the one the patch was made for or whose
 //!   bytes are not what the patch expects; and the same patch run backwards gives the original file back, checked
 //!   by hash.
+//! * [`book`]: the **saved recipes**, one list file, replaced only from the version the caller opened.
 //! * [`recipe`]: a **reproducible recipe** (spec 2.2). An ordered list of asset-level steps (layer an imported
 //!   mod, patch a file) that builds a folder of files in the workspace. The same recipe over the same inputs gives
 //!   the same files, and a dry run says so before anything is written. Every run keeps a **provenance record**:
@@ -22,6 +23,7 @@
 //! build (spec 2.7). Every test uses made-up files. The module writes only into the workspace folder and its own
 //! state files, never into a game build, and it deletes nothing.
 
+pub mod book;
 pub mod patch;
 pub mod recipe;
 pub mod tools;
