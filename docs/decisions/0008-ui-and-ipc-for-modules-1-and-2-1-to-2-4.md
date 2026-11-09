@@ -190,4 +190,37 @@ Calls made while building it (all inside the plan; say so if any should change):
 
 Still open from this slice: **no adapter exists for any real game, so Play is refused for every real game**; the game-file risk policy (`trust::policy`) is not
 connected to launch; SUL cannot stop a program it started; the history is not kept across runs; nothing was run in a real window or with a real program. Slice D2
-(catalogue and game detail) is not built.
+(catalogue and game detail) was built next, below.
+
+## Slice D2, built 2026-11-09 (catalogue and game detail)
+
+This is the second half of slice D. What was built, as planned: the catalogue half of `ManagerService` (`manager/cataloguing.rs`: `catalogue_view`, `game_detail`,
+`catalogue_set_categories`, `catalogue_set_artwork`) over the `Catalogue` rules of spec 1.1 that already existed; four commands with the same names; and
+`ui/src/lib/catalogue.ts`, `ui/src/components/GameDetailPanel.tsx` and `ui/src/components/CategoryChips.tsx`, on the Game Library page.
+
+Calls made while building it (all inside the plan; say so if any should change):
+
+- **The library names the games.** The commands take only a game id. They look it up among the games the library lists and pass `(id, display name)` to the
+  service; an id the library does not list is refused, so no entry is ever made for a game nobody has seen and a name on the page is never one the page made up.
+  A game the last scan did not find can still be labelled, because the library still lists it.
+- **Artwork is a reference, not a copy, and it is not shown.** The service checks the path (a normal .png, .jpg, .jpeg or .webp file, not empty, not over 20 MB)
+  and remembers it. It never copies, fetches or reads the file. Showing a local image in the app needs the asset protocol, which is a new Tauri permission;
+  that is an owner decision (decision 0008's rule: no new plugin or permission without one), so the page says plainly that the image cannot be shown yet.
+- **An edit is saved before it is shown, and it returns both views.** `catalogue_set_categories` and `catalogue_set_artwork` answer with the game's detail and the
+  category view as they are after the change, so the page replaces both together. A change that cannot be saved leaves the file and the screen as they were.
+  The page makes one change at a time.
+- **No confirmation question.** An edit changes only the owner's own labels in SUL's own state file, and Remove is undone by adding the name again. The question
+  dialog is for actions that change or delete files.
+- **The filter combines with the sidebar search by AND.** The sidebar's own rule (name, publisher, source) is unchanged; the category filter is applied on top of
+  it, and the sentence above the grid says which filters are on. `Catalogue::search` (names, ids and categories) is not used by any page.
+- **Only categories that a listed game carries are offered as filters.** A category kept for a game the library no longer lists stays in the saved file but gets
+  no button, so a button never shows a count it cannot fill. A chosen category that no game carries any more is dropped, so the grid never goes empty by itself.
+- **Categories are the same when they differ only in ASCII case**, as in the core; the first spelling is kept. The page repeats that rule only to save a press
+  (a repeat is turned away on the page and nothing is sent); the core decides again.
+- **The page asks again when the library's set of games changes** (after a scan), and a late answer for a game whose details were closed or replaced is dropped.
+- **Reading never starts or polls anything.** The detail view is gathered from the builds, the adapter registry and the launch state already held; it does not
+  ask a program whether it ended.
+
+Still open from this slice: the artwork image cannot be shown until the owner decides on the asset-protocol permission; SUL checks the file's name ending, kind
+and size, not its contents; `Catalogue::search` is not connected to a page; a damaged `catalogue.json` stops the manager from opening and leaves the file
+untouched (tested at the service level, not in the app); nothing was run in a real window or on a real disk.

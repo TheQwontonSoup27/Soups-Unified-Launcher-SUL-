@@ -194,6 +194,7 @@ describe("a game's details, opened from its card", () => {
     assert.match(text, /Now:\s*Not running/);
     assert.match(text, /No adapter is registered for this game/);
     assert.match(text, /SUL has no build of this game yet/);
+    assert.equal(one(panel(host, ALPHA), "div[aria-label='Builds of this game'] p").textContent, "None yet.", "the builds list says it is empty instead of showing nothing");
     assert.equal(one(panel(host, ALPHA), ".badge").textContent, "Not investigated");
     unmount();
   });
