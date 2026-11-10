@@ -1,5 +1,7 @@
 # Project Status — Soups Unified Launcher (SUL)
 
+> **2026-11-09: a ground-up rebuild from a new spec is starting. Read `HANDOFF.md` first; do not read this whole file (77 KB).** Everything below describes the build as it stood at `main` @ 131ca0c, also kept on the branch `archive/legacy-pre-ground-up-2026-11-09`. The new spec was not in the repo when this note was written, and no decision has been made about reusing the old code.
+
 **Last updated:** 2026-11-09 (spec Module 1 and items 2.1 to 2.4 were merged into `main` as 178e84f on the owner's go-ahead, and CI on `main` passed; slices A, B, C1, C2, D1 and D2 of the screens and Tauri commands for them (library folders and managed builds; mods, profiles, deploy, purge and undo; recipes and patches; external tools; launch and runtime; catalogue and game detail) are built (decision 0008) and were merged into `main` on the owner's go-ahead as 7299ef2 on 2026-11-09, and CI on `main` passed (run 42700201764: `core`, `ui`, `tauri-shell` succeeded); the rest of this line is the state of `main` on 2026-11-01) (2026-11-01: slice 2, the Security & Trust investigation, the V5.1 alignment, the game-file policy, list sources and the `sul-net` boundary are all on `main` (merge 7338559, Windows CI run 41286114241: `core`, `ui`, `tauri-shell` succeeded))
 
 ## Decisions made (owner approved)

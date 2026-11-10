@@ -1,5 +1,7 @@
 # Claude handoff — Soups Unified Launcher (SUL)
 
+> **Fresh start (2026-11-09): read `HANDOFF.md` first.** The owner is beginning a ground-up build from a new spec that replaces the old one; `PROJECT_SPEC.md` below is the old V5.1 spec. The existing code is archived on the branch `archive/legacy-pre-ground-up-2026-11-09`. Do not change or delete existing code until the owner approves a plan. Where this file says to read `PROJECT_SPEC.md`, read the new spec instead, and ask where it is if it is not in the repo.
+
 Use this file as operating instructions for work on the Soups Unified Launcher repository. The authoritative product requirements are in `PROJECT_SPEC.md`. Design inspiration images are in `design-references/`.
 
 ## Project intent

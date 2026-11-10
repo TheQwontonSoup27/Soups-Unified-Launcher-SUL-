@@ -2,6 +2,8 @@
 
 Staged priorities, not promises. Update status only with evidence.
 
+> **2026-11-09: a ground-up rebuild from a new spec is starting; the stages below are the old plan and may be superseded. Read `HANDOFF.md` first.**
+
 1. **Foundation** — DONE in code, built and tested in Windows CI; not yet launched on a real machine: monorepo, shell, theme,
    registry scanner, compatibility matrix, library index, storage isolator, updater, portability, templates, safety core, Discord
    presence (Step 1 and Step 1.5). Redundant legacy files removed; see `PROJECT_STATUS.md`.

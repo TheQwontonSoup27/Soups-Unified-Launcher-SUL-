@@ -1,7 +1,7 @@
 # Soups Unified Launcher (SUL)
 
 An open-source, modular desktop game launcher: Tauri 2, a Rust core and a React/TypeScript UI. Windows first.
-Early development. Read `PROJECT_SPEC.md` (requirements), `CLAUDE.md` (engineering rules), `PROJECT_STATUS.md` and `ROADMAP.md`.
+Early development. A ground-up rebuild from a new spec is starting (2026-11-09): read `HANDOFF.md` first. `PROJECT_SPEC.md` is the old V5.1 spec; `CLAUDE.md` holds the engineering rules; `PROJECT_STATUS.md` and `ROADMAP.md` describe the build as it stood at the archive branch `archive/legacy-pre-ground-up-2026-11-09`.
 
 ## Layout
 - `crates/sul-core`: Rust core (game scanner, compatibility matrix, storage, updater, safe file operations, manifests, Discord presence).
