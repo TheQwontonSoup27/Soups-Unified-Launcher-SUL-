@@ -32,6 +32,7 @@ In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's stan
 | `cargo xtask config-check`, `electron-audit`, `ac-regression`, `release-check --release R0` | all exit 0 (but see gap 2) |
 | `node .github/scripts/check-network-crates.mjs` | pass: no network crate in `sul-core` or `sul-tauri` |
 | UI: `npm run ui:typecheck`, `npm test --workspace ui`, `npm run ui:build` | pass; 615 of 615 tests |
+| GitHub Windows CI, commit `371fda2` (run 44436843640) | all four jobs success: `r0-substrate`, `core`, `ui`, `tauri-shell`. This is the first Windows compile of the new crates. |
 
 ## Known gaps (do not claim past these)
 
@@ -42,8 +43,8 @@ In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's stan
 
 ## Next
 
-1. Read the Windows CI result for this branch and fix anything it shows.
+1. (Done: Windows CI is green on the bootstrap commit.)
 2. Merge map: classify each old `sul-core` module against the new spec chapters, list real conflicts, and ask the owner before moving code. Likely areas: the old ten-module UI registry versus the new subsystem list; the old "network code only in `sul-net`" rule versus the new spec's declared network surfaces; the old `sul-core` name versus the new substrate crate of the same name.
 3. R0 layer 1 and 2: harden `sul-ipc-types` and `sul-wire`, make the xtask gates real.
 
-Next command: `gh run list --branch rebuild/r0-bootstrap`
+Next command: `cargo check --workspace` (to confirm the baseline is still green), then start the merge map.
