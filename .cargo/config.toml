@@ -1,0 +1,6 @@
+[alias]
+# `cargo xtask <cmd>` runs the gate/guard/benchmark runner (xtask/src/main.rs).
+xtask = "run --package xtask --"
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-cpu=x86-64-v3", "-C", "control-flow-guard"]

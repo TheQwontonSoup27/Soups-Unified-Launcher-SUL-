@@ -2,7 +2,7 @@
 //! Protocol verified against the MIT-licensed discord/discord-rpc sources (deprecated by Discord in
 //! favour of its newer SDKs, so this is labelled Experimental until tested against a live client).
 //!
-//! Privacy rules (PROJECT_SPEC.md, Social module): presence is OFF by default; when the global
+//! Privacy rules (V5.1 spec, Social module; see docs/legacy/README.md): presence is OFF by default; when the global
 //! toggle is off nothing is published and any existing activity is cleared; games whose capability
 //! status is Unsupported / Not investigated never publish.
 //!

@@ -1,0 +1,12 @@
+[package]
+name = "sul-wire"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+sul-ipc-types = { path = "../sul-ipc-types" }
+sul-ring = { path = "../sul-ring" }
+rkyv = { workspace = true }
+thiserror = { workspace = true }

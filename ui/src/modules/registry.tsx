@@ -4,7 +4,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import type { ModuleDef } from "../types";
 
 /**
- * The 10 primary modules from PROJECT_SPEC.md section 3. Each is self-contained and registers here.
+ * The 10 primary modules from the V5.1 spec, section 3 (see docs/legacy/README.md). Each is self-contained and registers here.
  * `home` says where the shell shows it: Game Library is the library page, Security & Trust and
  * Appearance are Settings panes (Step 1 spec, section 2), the rest get a sidebar entry.
  */
@@ -35,7 +35,7 @@ export function renderModule(id: string, embedded = false): ReactNode {
     <section className="card">
       <StatusBadge status={m.status} />
       <p>{m.summary}</p>
-      <p className="muted">Nothing in this module is implemented yet. See ROADMAP.md for when it is scheduled.</p>
+      <p className="muted">Nothing in this module is implemented yet. Its release is set by the release plan in SUL-LEDGER/releases.md.</p>
     </section>
   );
   if (embedded) return body;

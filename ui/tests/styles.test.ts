@@ -1,5 +1,5 @@
 // Layout rules that a DOM simulation cannot measure. These only pin the text of the rule; what the rule does
-// was measured in a real browser (see PROJECT_STATUS.md): in a 500 px high window the Settings tab strip was
+// was measured in a real browser (see PROJECT_STATUS.md on the archive branch, docs/legacy/README.md): in a 500 px high window the Settings tab strip was
 // 2 px high without it and 41 px high with it.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

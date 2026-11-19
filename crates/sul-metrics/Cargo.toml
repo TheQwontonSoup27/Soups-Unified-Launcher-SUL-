@@ -1,0 +1,11 @@
+[package]
+name = "sul-metrics"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+sul-ipc-types = { path = "../sul-ipc-types" }
+rustc-hash = { workspace = true }
+bumpalo = { workspace = true }

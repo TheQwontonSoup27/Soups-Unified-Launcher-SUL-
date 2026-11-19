@@ -65,16 +65,12 @@ fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
 /// The documents that are written by hand: the root documents and everything under `docs/`.
 fn documents() -> Vec<PathBuf> {
     let root = repo();
-    let mut files: Vec<PathBuf> = [
-        "README.md",
-        "CLAUDE.md",
-        "PROJECT_SPEC.md",
-        "PROJECT_STATUS.md",
-        "ROADMAP.md",
-    ]
-    .iter()
-    .map(|f| root.join(f))
-    .collect();
+    // The V5.1 build's PROJECT_SPEC.md, PROJECT_STATUS.md and ROADMAP.md are gone from the working tree (they live on the
+    // archive branch). The new spec files (SUL-*.md) carry their own reference chapter and are not scanned here.
+    let mut files: Vec<PathBuf> = ["README.md", "CLAUDE.md"]
+        .iter()
+        .map(|f| root.join(f))
+        .collect();
     markdown_files(&root.join("docs"), &mut files);
     files
 }
@@ -130,7 +126,7 @@ fn the_scan_reaches_the_documents_it_is_meant_to() {
         .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
         .collect();
     for expected in [
-        "PROJECT_SPEC.md",
+        "README.md",
         "CLAUDE.md",
         "steamcmd-acquisition-2026-11-03.md",
         "audio-modding-2026-11-01.md",

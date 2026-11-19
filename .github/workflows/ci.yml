@@ -4,6 +4,41 @@ on: [push, pull_request]
 # Windows only for now (owner decision 2026-10-22). Scripts are the same ones documented in
 # docs/SETUP-WINDOWS.md, so a green run here means those steps work on a clean machine.
 jobs:
+  # The new design's R0 substrate (CLAUDE.md "R0 Build Order") and the xtask gate runner. Same failure-annotation
+  # pattern as `core`. The xtask gates are still thin (see docs/SESSION_STATE.md); this job proves they run on Windows.
+  r0-substrate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - name: clippy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo clippy -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-metrics -p xtask --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath clippy.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 clippy.log; exit $code }
+      - name: tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo test -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-metrics -p xtask 2>&1 | Tee-Object -FilePath test.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 test.log; exit $code }
+      - name: xtask gates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          cargo xtask config-check 2>&1 | Tee-Object -FilePath gates.log
+          if ($LASTEXITCODE -eq 0) { cargo xtask electron-audit 2>&1 | Tee-Object -FilePath gates.log -Append }
+          if ($LASTEXITCODE -eq 0) { cargo xtask ac-regression 2>&1 | Tee-Object -FilePath gates.log -Append }
+          if ($LASTEXITCODE -eq 0) { cargo xtask release-check --release R0 2>&1 | Tee-Object -FilePath gates.log -Append }
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 gates.log; exit $code }
+
   core:
     runs-on: windows-latest
     steps:

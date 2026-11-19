@@ -1,26 +1,118 @@
 [workspace]
+# resolver 3 is the V5.1 build's choice and is kept: it only makes dependency selection honour `rust-version`, so it
+# does not conflict with anything in the new spec.
 resolver = "3"
-members = ["crates/sul-core", "crates/sul-net", "src-tauri"]
+members = [
+    # R0 substrate: the new design (CLAUDE.md "R0 Build Order")
+    "crates/sul-ipc-types",
+    "crates/sul-ring",
+    "crates/sul-wire",
+    "crates/sul-trust",
+    "crates/sul-metrics",
+    "xtask",
+    # Carried over from the V5.1 build and being merged into the layout above (docs/SESSION_STATE.md)
+    "crates/sul-core",
+    "crates/sul-net",
+    "src-tauri",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+# `license` is the new design's declaration. The old build left it unset until the owner chose; no LICENSE files are
+# in the repository yet (awaiting the owner's confirmation and the copyright holder's name).
+license = "MIT OR Apache-2.0"
 publish = false
 repository = "https://github.com/TheQwontonSoup27/Soups-Unified-Launcher-SUL-"
-# license: undecided (PROJECT_SPEC.md section 7). Left unset on purpose until the owner chooses.
 
 [workspace.dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-tracing = "0.1"
+# Zero-copy IPC & serialization
+rkyv = { version = "0.8.9", features = ["bytecheck"] }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+toml = "0.8.20"
+
+# Allocator & concurrency primitives (D-143, D-147)
+mimalloc = { version = "0.1.43", default-features = false }
+core_affinity = "0.8.3"
+crossbeam-epoch = "0.9.21"
+crossbeam-utils = "0.8.21"
+arc-swap = "1.9.5"
+bumpalo = "3.20.3"
+rustc-hash = "2.1.3"
+smallvec = "1.16.5"
+parking_lot = "0.12.3"
+simsimd = "6.2.1"
+aho-corasick = "1.1.3"
+memchr = "2.7.4"
+tokio = { version = "1.43.0", features = ["rt-multi-thread", "sync", "time", "macros"] }
+rayon = "1.10.0"
+
+# Diagnostics, error handling & CLI
+thiserror = "2.0.11"
+miette = { version = "7.5.0", features = ["fancy"] }
+clap = { version = "4.5.29", features = ["derive"] }
+tracing = "0.1.41"
+# Kept from the V5.1 build (used by sul-core and src-tauri)
 tracing-subscriber = "0.3"
+
+# Crypto, hashing & compression
+blake3 = { version = "1.6.1", features = ["rayon"] }
+zstd = "0.13.2"
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+chacha20poly1305 = "0.10.1"
+# Kept from the V5.1 build (used by sul-core)
 sha2 = "0.10"
 hex = "0.4"
+
+# Storage & memory mapping
+rusqlite = { version = "0.33.0", features = ["bundled"] }
+memmap2 = "0.9.5"
+redb = "2.4.0"
+
+# Completion I/O, compression, tokenization, capture & audio (D-145, D-146)
+compio = { version = "0.14.0", features = ["runtime", "macros"] }
+lz4_flex = { version = "0.13.0", features = ["safe-decode", "safe-encode", "frame"] }
+kitoken = "0.11.0"
+windows-capture = "1.5.0"
+wasapi = "0.21.0"
+rubato = "0.16.1"
+
+# Windows user-mode APIs (zero kernel-mode code)
+windows = { version = "0.59.0", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_Memory",
+    "Win32_Storage_FileSystem",
+] }
+
+# Workspace crates
 sul-core = { path = "crates/sul-core" }
 
+[profile.dev.package."*"]
+opt-level = 2
+
 [profile.release]
-lto = "thin"
+opt-level = 3
+lto = "fat"
 codegen-units = 1
-strip = "symbols"
+panic = "unwind"
+strip = false
+debug = 1
+
+[profile.release-small]
+inherits = "release"
+opt-level = "s"
+panic = "abort"
+strip = true
+debug = 0
+
+[profile.release-ci]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+
+[profile.bench]
+inherits = "release"
+debug = 1
