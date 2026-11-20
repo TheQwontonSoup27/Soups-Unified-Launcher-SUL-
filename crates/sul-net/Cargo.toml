@@ -9,5 +9,7 @@ repository.workspace = true
 
 # No dependencies on purpose. The first network dependency (see docs/decisions/0006: reqwest 0.13 with `rustls-no-provider` and
 # `ring`) is added here and nowhere else, in the same commit that changes `crates/sul-core/tests/write_sites.rs`,
-# `.github/scripts/check-network-crates.mjs`, `ui/tests/no-network.test.ts` and the Security & Trust page text.
+# `ui/tests/no-network.test.ts` and the Security & Trust page text. The `cargo xtask ac-regression` network guard
+# (xtask/src/network.rs) already lets network crates in through this package only: it is a declared package there
+# (Ch. 16 §16.15.14, docs/decisions/0009).
 [dependencies]

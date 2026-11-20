@@ -94,7 +94,7 @@ date in each record. This list is of what was named, not an endorsement.
 | `minisign-verify` | 0.3.0 exists; key custody undefined | 0006 |
 | `whisper-rs`, `piper-rs` | 0.16.0 and 0.2.0 exist; Windows build, VRAM use and latency untested | 0006 |
 | `egui`, `whisper.cpp`, Piper | Named by spec V5.1 (overlay and local speech); their addresses are not recorded in the repository | 0006 |
-| `tokio`, `windows`, `windows-sys`, `wry`, Tauri 2 | Read as part of the Windows dependency graph; 42 network-related crates are on the deny list in `.github/scripts/check-network-crates.mjs` | the security note |
+| `tokio`, `windows`, `windows-sys`, `wry`, Tauri 2 | Read as part of the Windows dependency graph; 42 network-related crates are on the deny list in `xtask/src/network.rs` (it replaced `.github/scripts/check-network-crates.mjs` on 2026-11-20) | the security note |
 
 ## 5. Services and projects the spec names (no link in the spec; none investigated)
 

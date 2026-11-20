@@ -6,5 +6,5 @@
 //! explicit interface, off by default and switched on by the owner.
 //!
 //! Tripwires that keep this true: `crates/sul-core/tests/write_sites.rs` (this crate stays empty and unreferenced, and no other
-//! manifest may declare a network or credential crate), `.github/scripts/check-network-crates.mjs` (no network crate in the
-//! Windows build of `sul-core` or `sul-tauri`).
+//! manifest may declare a network or credential crate), and the declared-surface guard in `cargo xtask ac-regression`
+//! (`xtask/src/network.rs`, Ch. 16 §16.15.14: network crates may enter a package's Windows graph only through `sul-net`).

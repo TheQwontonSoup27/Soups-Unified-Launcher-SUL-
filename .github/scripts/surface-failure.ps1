@@ -9,7 +9,8 @@ $all = @(foreach ($log in $Logs) { if (Test-Path $log) { Get-Content $log | ForE
 
 # Compiler and clippy errors, test panics and the list of failed tests. "Compiling thiserror" lines
 # are not matched: the pattern needs `error` at the start of a line or as `error:` after a location.
-$pattern = '^error(\[E\d+\])?:|\.rs:\d+:\d+: (error|warning)|panicked at|^---- |FAILED|^failures:'
+# `^PROBLEM ` is a finding line of the xtask guards (xtask/src/network.rs), which name the cause of a failed gate.
+$pattern = '^error(\[E\d+\])?:|\.rs:\d+:\d+: (error|warning)|panicked at|^---- |FAILED|^failures:|^PROBLEM '
 $hits = @($all | Where-Object { $_ -match $pattern } | Select-Object -First 25)
 $tail = @($all | Select-Object -Last 40)
 

@@ -40,6 +40,8 @@ Each of the three rows says so in its first sentence and carries a limitation.
   and address data types or documentation examples in `log`, `schemars`, `serde_json`, `serde_with` and `url`. `url::Url::socket_addrs` can resolve a host name if something calls it; SUL's code does not.
 
 **What now keeps it true.**
+> Update 2026-11-20: the first bullet below describes the Node script of the V5.1 build. It was replaced by the declared-surface guard in `cargo xtask ac-regression` (`xtask/src/network.rs`; docs/decisions/0009). The deny list (42 crates), the Windows target and the three feature checks are the same; the guard now covers every shipped package, lets network crates in only through the declared package `sul-net`, and also scans Rust source for networking APIs. Its 14 unit tests replace the script's 14 in `ui/tests/network-crates.test.ts`, which was removed. The text below is kept as written on 2026-10-31.
+
 - `.github/scripts/check-network-crates.mjs`, run in the `core` CI job (windows-latest) on every change: fails on a deny-listed crate, on tokio's `net` feature, or on any `Win32_Networking*`, `Win32_NetworkManagement*` or URLMon feature,
   for `sul-core`, `sul-tauri`, and `sul-tauri` with `--features steam`. In CI it writes its result as an annotation. Its decision logic is unit-tested (`ui/tests/network-crates.test.ts`).
 - `ui/tests/no-network.test.ts`: no network API, crate or address in SUL's own Rust and window source; the window's only `fetch` is for the wallpaper list it ships.

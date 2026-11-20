@@ -1,6 +1,8 @@
 //! SUL build, gate, AST-guard, and benchmark runner (`cargo xtask <cmd>`).
 //! Implements the R0 verification surface defined in Ch. 1 §10, §13.5.7, and SUL-LEDGER/*.md.
 
+mod network;
+
 use clap::{Parser, Subcommand};
 use miette::{Context, IntoDiagnostic, Result, bail};
 use std::path::PathBuf;
@@ -110,10 +112,14 @@ fn main() -> Result<()> {
         }
         Command::AcRegression => {
             println!(
-                "[xtask] ac-regression: verifying structural refusals, crate boundaries, feature orthogonality & Windows-only IPC"
+                "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14)"
+            );
+            println!(
+                "[xtask] ac-regression: NOT implemented yet: structural refusals, crate boundaries, feature orthogonality, Windows-only IPC"
             );
             validate_workspace_manifest()?;
-            println!("[xtask] ac-regression: OK");
+            network::check()?;
+            println!("[xtask] ac-regression: OK (for the guards listed above only)");
         }
         Command::ElectronAudit => {
             println!(
@@ -124,31 +130,35 @@ fn main() -> Result<()> {
         }
         Command::ReleaseCheck { release } => {
             println!(
-                "[xtask] release-check: validating {release} against SUL-LEDGER/releases.md & asset/schema parity"
+                "[xtask] release-check: implemented checks for {release}: workspace manifest (edition, MSRV), no Electron in Cargo.toml"
+            );
+            println!(
+                "[xtask] release-check: NOT implemented yet: reading SUL-LEDGER/releases.md, asset/schema parity, component parity"
             );
             validate_workspace_manifest()?;
             check_electron_free()?;
-            println!("[xtask] release-check ({release}): OK");
+            println!("[xtask] release-check ({release}): OK (for the checks listed above only)");
         }
         Command::BenchTelemetry => {
-            println!("[xtask] bench-telemetry: running ring, rollup, and query benchmarks");
+            println!("[xtask] bench-telemetry: NOT implemented yet (no benchmark was run)");
         }
         Command::SimulateConfig { config } => {
             println!(
-                "[xtask] simulate-config: dry-run VRAM/latency check for {}",
+                "[xtask] simulate-config: NOT implemented yet (nothing was simulated for {})",
                 config.display()
             );
         }
         Command::Plan { wave } => {
-            println!("[xtask] plan: emitting task DAG for wave {wave}");
+            println!("[xtask] plan: NOT implemented yet (no task DAG was emitted for wave {wave})");
         }
         Command::Pipeline { release } => {
             println!(
-                "[xtask] pipeline: running config-check -> electron-audit -> ac-regression -> release-check ({release})"
+                "[xtask] pipeline: implemented checks for {release}: workspace manifest, no Electron, network surfaces (same limits as ac-regression and release-check)"
             );
             validate_workspace_manifest()?;
             check_electron_free()?;
-            println!("[xtask] pipeline ({release}): OK");
+            network::check()?;
+            println!("[xtask] pipeline ({release}): OK (for the checks listed above only)");
         }
     }
     Ok(())

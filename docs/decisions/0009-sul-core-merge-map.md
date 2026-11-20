@@ -1,0 +1,77 @@
+# 0009 — Merge map: the old `sul-core` (V5.1 build) against the new spec
+
+Status: **partly answered by the owner on 2026-11-19 (see "Owner answers" at the end); the network rule (4.2) is done; no `sul-core` code moved yet.** Written 2026-11-19 on branch `rebuild/r0-bootstrap`. It answers the "Next" item in `docs/SESSION_STATE.md`: classify every old `sul-core` module against the new spec, list the real conflicts, and ask the owner before moving anything. The owner's rule (SESSION_STATE, "Owner decisions in force") governs: keep every old feature and design choice that does not contradict the new design; the new design wins where they disagree; the result must be compatible.
+
+In plain words: the old crate is 55 files and 30,753 lines of Rust. Almost all of it fits somewhere in the new design. The new spec is silent about several old features (managed builds, library roots, recovery journal, per-game tick matrix, templates, Discord presence), and silence is not a contradiction, so those stay. There are a small number of real conflicts, listed in section 4.
+
+## 1. What the new spec says `sul-core` is
+
+- Ch. 1 §2 and §2.6 call the substrate "what every other subsystem depends on": config loading and validation, IPC, trust primitives, crash handling, watchdog. Startup steps 1 and 2 (load config from `%APPDATA%\SUL\config.toml`, verify the signing key) are `sul-core` work (Ch. 12 §2.1 puts the embedded SQLite WAL store in `sul-core`; Ch. 13 names `sul-core` as a user of `arc-swap` for wait-free config hot-reload).
+- It is **not** where the library, builds or mods live. Ch. 1 §2.6 puts "UI, game library, mod tooling" in `sul.exe` (the Tauri shell), and Ch. 3 gives the mod tools their own crate names (`sul-mod`, `sul-unpack`, `sul-vfs`, `sul-sandbox`, `sul-save`).
+- Ch. 3 §2.14 already anticipates the old Steam code: "`sul-steam` (or the Steam IPC path within `sul-core`)". Steam library parsing and Steam IPC are marked **R0** (the launcher release).
+- The stack is unchanged from the old build: Tauri 2, a Rust core, a React/TypeScript UI (Ch. 1 §2.1; decision D-067 says "Tauri 2 is the shipping framework").
+
+## 2. The map
+
+Line counts are real (counted from the files). "Fits" means the new spec asks for the same thing. "Spec is silent" means no counterpart was found by searching the spec (so it stays). Release is from `SUL-LEDGER/releases.md`.
+
+| # | Old modules | Lines | What it does (plain words) | New home | Verdict |
+|---|---|---:|---|---|---|
+| A1 | `registry/*` (steam_library, vdf, gog, drives, paths, uninstall, access, mod) | 2,712 | Finds installed games on every drive: Steam library folders, GOG, uninstall keys, "Games" folders | R0 launcher layer: `launcher.steam_library_parsing` (Ch. 3 §2.1, §2.14) | **Fits** (R0) |
+| A2 | `steam.rs` | 664 | Attaches to the running Steam client; reads public playtime; never stores credentials | Ch. 3 §2.14 Steam IPC (read-only, `steamworks-rs`), `launcher.steam_ipc` | **Fits** (R0). Web API URL is not on the declared network list, see 4.2 |
+| A3 | `library`, `service`, `matrix`, `capability`, `catalogue`, `adapters`, `fsys` | 3,203 | Remembers scan results and the owner's per-game ticks; five honest capability labels; categories, artwork, detail page; one adapter interface per game | Library index in SQLite (Ch. 12 §2.1); per-game launch profile `game_registry.json` (Ch. 3 §2.24) | **Fits, needs adapting** (storage, adapters ↔ launch profiles). Tick matrix and labels: spec is silent, keep |
+| B | `builds`, `manifest`, `roots`, `runtime`, `process`, `manager` (+`playing`, `cataloguing`), `storage` | 6,986 | Managed copies of a game with SHA-256 inventories and a protected original; several library roots with marker files; start a build and follow it | No counterpart (searched "managed build", "library root") | **Spec is silent, keep.** Launch must additionally obey the `anti_cheat` block (Ch. 3 §2.24, Ch. 16 §16.3) |
+| C | `trust/*` (integrity, package, policy, quarantine, webhook, mod) | 4,451 | SHA-256 build verification; mod package scanning; "when may SUL act without asking" rule; quarantine; webhook address checking | `sul-trust` and `sul-quarantine` (R0 substrate, Ch. 1 §2.4; Ch. 3 §2.13; Ch. 16) | **Fits, needs adapting**: quarantine must become *encrypted* (Ch. 3 §2.13); two-tier hashing agrees (SHA-256 external, `blake3` + Ed25519 internal). `webhook`: see 4.2 |
+| D | `mods/*`, `builder/*`, `manager/{modding,building,tooling}` | 10,499 | Mod store, profiles with load order, deploy / purge / undo with an ownership ledger; recipes; reversible byte patches; external tools | `sul-mod` (Ch. 3 §2.10, **R1**), with `sul-vfs` as the second backend | **Fits** (R1). Deploy model question: see 4.5. The spec names the same HD2 audio modder the owner chose |
+| E | `error`, `logging`, `journal`, `safepath`, `fsops`, `names`, `templates`, `updater`, `portability`, `discord`, `testkit`, `lib` | 2,238 | Error type; secret-redacting logs; recovery journal; safe paths and file ops; templates; version log with rollback; portable mode; Discord Rich Presence over local IPC | `error` → `CoreError` (Ch. 1 §3.4); `logging` → diagnostics redaction (Ch. 12 §2.9); `updater` → declared auto-updater surface (Ch. 16 §16.15.14) | **Fits** for `error`, `logging`, `updater`. **Spec is silent, keep** for `journal`, `safepath`, `fsops`, `names`, `templates`, `discord`. `portability`: see 4.6 |
+| | **Total** | **30,753** | | | |
+
+Other old parts: `crates/sul-net` (empty on purpose), `src-tauri` (Tauri shell, 56 tests), `ui` (React, 615 tests). See 4.2, 4.7.
+
+## 3. Where old and new already agree (no work needed)
+
+- **Stack:** Tauri 2 + Rust + React/TypeScript, Windows only.
+- **Steam:** read-only, `steamworks-rs`, no credentials (decision 0003 and Ch. 3 §2.14 say the same).
+- **Hashing:** SHA-256 manifests for external game files, `blake3` + Ed25519 for SUL's own files (the V5.1 two-tier rule, `docs/decisions/0006`; the spec uses both).
+- **Overlay and anti-cheat posture:** external overlay only, no VFS or frame generation on kernel anti-cheat titles (Ch. 16 §16.3.1). The old "protected original, never written" rule is stricter than the spec and stays.
+- **Watchdog priority:** spec says `sul-watchdog` runs BELOW_NORMAL; the owner's rule was "below normal until measured".
+- **Audio tool for HD2:** `RaidingForPants/hd2-audio-modder` is named in Ch. 3 §2.11, matching the owner's earlier answer.
+- **Name overlap, not a conflict:** the spec's `sul-compat` is a config-conflict resolver (Ch. 1 §5). The old `matrix` is a per-game tick and compatibility table. Different things; keep both, do not merge them.
+
+## 4. Real conflicts and open points
+
+1. **The name and role of `sul-core`.** The new spec needs a small substrate crate called `sul-core` (R0 build order, layer 3). The old crate has that name and holds 30,753 lines of launcher, build and mod code. Both cannot be `sul-core`. *Proposed:* rename the old crate (mechanical, about 50 files touched, tests unchanged) so the name is free; create the new substrate `sul-core` when layer 3 is reached; move modules to their homes in the table as their build-order layers are reached.
+2. **The no-network CI rule versus the new network model.** Old rule (`.github/scripts/check-network-crates.mjs`): fail CI if any network-capable crate is compiled into `sul-core` or `sul-tauri`. New spec: `sul-net` runs *inside* `sul.exe` (Ch. 1 §2.6) and Ch. 16 §16.15.14 lists the declared surfaces (Tauri IPC, RustXNG localhost, GitHub, hive-mind fetch, auto-updater, Sentry, GEV feeds and the Phase 3 list). Two old surfaces are **not on that list**: the Discord webhook and the Steam Web API (Ch. 3 §2.14 mentions "the declared Steam Web API surface" but §16.15.14 does not list a URL). *Proposed:* keep the old rule through R0 (nothing in R0 needs a network crate); replace it with the new declared-surface tripwires in the same commit that adds the first network dependency, as the comment in `crates/sul-net/Cargo.toml` already requires; ask the owner to add the two surfaces to the declared list before any code calls them. Nothing calls either today.
+3. **Where the library index lives.** Old: JSON files. New: one embedded SQLite database in WAL mode, multiple schemas (Ch. 12 §2.1). *Proposed:* the new design wins; a one-way import of any existing JSON index on first run. No real owner data exists yet (nothing ran against a real disk), so nothing can be lost. Build manifests stay JSON with forward-only migration (owner decision 2026-11-01); the spec does not cover them.
+4. **Quarantine is encrypted in the new spec.** Old quarantine copies, hash-checks, records, then removes into a plain folder. Ch. 3 §2.13 says "encrypted quarantine". *Proposed:* add `chacha20poly1305` (already a workspace dependency) when quarantine moves into `sul-quarantine` at layer 3; keep the old copy-verify-record-remove order and the journal.
+5. **How mods are put into a game (R1, not urgent).** Old: copy-deploy into a managed *copy* of the game, with purge and undo. New: `sul-vfs`, a WinFSP overlay (Ch. 3 §2.12), turned on per game by `vfs_enabled` in `game_registry.json`. *Proposed:* both coexist. Copy-deploy is the backend when `vfs_enabled` is false (the spec's default for Elite Dangerous); VFS is the second backend when it lands. Kernel anti-cheat titles refuse VFS (Ch. 16 §16.3.1). Decide at R1.
+6. **Portable mode.** `portability.rs` and a `portable.marker` file make a self-contained copy. The spec fixes data under `%APPDATA%\SUL` (startup step 1) and the vault is bound to DPAPI/TPM (Ch. 2), which does not travel with a copied folder. The old plan listed portable mode as an item that the new spec might supersede. Needed the owner's call; answered 2026-11-19, see "Owner answers".
+7. **UI shell.** Old: a registry of ten V5.1 modules (`ui/src/modules/registry.tsx`), nearly all placeholders. New: a component catalog (Ch. 1 §3.5: GameLibraryView, ModManager, SettingsView, DiagnosticsPanel, ...) with Settings sub-panes. Three old placeholders have no new counterpart: Social & Networking, Remote Play, News & Updates. *Proposed:* keep the sidebar, density, theme, backgrounds and Security & Trust pane infrastructure; swap the placeholder list for the new catalog as each subsystem arrives; keep the three placeholders as placeholders (no code). Any of them that later needs a network call needs a declared surface first (4.2).
+8. **Per-game settings.** Old: adapters and the tick matrix. New: `game_registry.json` per-game profile with an Ed25519-signed `anti_cheat` block checked at every launch (Ch. 3 §2.24, Ch. 16 §16.3.3). *Proposed:* adapters keep recognising and planning launches; their launch plan is checked against the signed `anti_cheat` block before anything starts. Real work at R0 layer 5, not a conflict.
+
+## 5. Proposed order
+
+Follows `CLAUDE.md`'s R0 build order, so each move happens when the destination exists:
+
+1. Rename the old crate (4.1). Mechanical; the full test suites must stay green.
+2. Layer 1 and 2: harden `sul-ipc-types` and `sul-wire` (alignment gap), make the `xtask` gates real.
+3. Layer 3: create the new `sul-core` substrate; move `error`, `logging`, `journal`, `safepath`, `fsops`; move `trust/*` into `sul-trust` / `sul-quarantine` (encrypted).
+4. Layer 5: R0 launcher: discovery, Steam, library index on SQLite, adapters checked against `anti_cheat`.
+5. R1: `sul-mod` from `mods/*` and `builder/*`.
+
+## 6. Limits of this map
+
+- Nothing was run on Windows. Verdicts come from reading source headers and the scoped spec sections: Ch. 1 §2 to §3.1, §3.5; Ch. 3 §2.1, §2.9 to §2.14, §2.24 (start); Ch. 12 §2.5; Ch. 16 §2.2, §16.15.14; plus searches across the spec. Ch. 2 (auth and vault), Ch. 11 (`.sulpack`) and Ch. 14 §14.13 (quarantine and threat log) were only searched, not read; the `trust/policy` and quarantine verdicts are therefore "fits, to be re-checked when migrated".
+- "Spec is silent" means a search of the spec for the feature's terms found nothing relevant, not that the spec was read end to end (it is about 14,000 lines; `CLAUDE.md` forbids loading it whole).
+- The old crate's 618 tests and the 56 Tauri tests pass today; this record changes no code.
+
+## Owner answers
+
+Recorded from the owner's messages of 2026-11-19. Where an answer differs from a proposal in section 4 or 5, the answer governs.
+
+- **4.1, the name and role of `sul-core`: not just a rename.** Look into the old code, judge what can and cannot be implemented under the new plans, then merge it into the new design or rewrite the core, and delete the old traces of the old build. This replaces step 1 of section 5 ("rename the old crate"). The concrete sequence is set out for approval in `docs/SESSION_STATE.md` ("Next"); no code has moved.
+- **4.2, the network rule: swap now.** Replace the old no-network CI rule with the new spec's declared-surface checks now, not at the first network dependency. **Done 2026-11-20:** `xtask/src/network.rs` runs inside `cargo xtask ac-regression` (Windows CI job `r0-substrate`); the Node script `.github/scripts/check-network-crates.mjs`, its type stub and `ui/tests/network-crates.test.ts` were removed. Same deny list (42 crates) and the same results on today's graph (`sul-core` 31 crates, `sul-tauri` 218, 221 with all features); network crates may now enter a package's graph only through the declared package `sul-net`.
+  - *Still open:* the Discord webhook and the Steam Web API are not on the spec's declared list (Ch. 16 §16.15.14). The owner has not yet been asked to add them. Nothing calls either.
+  - *Left in place on purpose:* `crates/sul-core/tests/write_sites.rs` (keeps `sul-net` empty and unreferenced) and `ui/tests/no-network.test.ts` (no network API in the window's source). Both are stricter than the guard and still true; they change in the commit that adds the first network dependency, together with the Security & Trust page text.
+- **4.6, portable mode: keep it** (`portable.marker`). The owner wants to use it later to make another portable version of the app. *Open technical point, not yet answered:* the vault is bound to DPAPI/TPM (Ch. 2) and does not travel with a copied folder, so a portable copy needs its own answer for the vault when that work comes up.
+- **No answer yet** for 4.3 (library index on SQLite), 4.4 (encrypted quarantine), 4.5 (copy-deploy next to VFS, R1), 4.7 (UI shell) and 4.8 (per-game settings and the `anti_cheat` block). Under the standing rule (keep what does not contradict the new design; the new design wins where they disagree) the proposals above are the working default. Each is confirmed or changed when the layer that needs it is reached.
