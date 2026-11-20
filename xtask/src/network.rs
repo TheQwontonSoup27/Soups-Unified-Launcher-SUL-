@@ -355,7 +355,12 @@ pub fn check() -> Result<()> {
     for problem in &problems {
         eprintln!("PROBLEM {problem}");
     }
-    bail!("{} network-surface problem(s)", problems.len())
+    // Not `bail!` here: it expands to `return ...;`, and a newer rustc than the one in the Linux container rejects that
+    // trailing semicolon when the macro is the last expression of a function (Windows CI, 2026-11-20).
+    Err(miette::miette!(
+        "{} network-surface problem(s)",
+        problems.len()
+    ))
 }
 
 #[cfg(test)]
@@ -537,7 +542,8 @@ mod tests {
 
     #[test]
     fn a_failing_cargo_call_is_an_error_not_a_pass() {
-        let fake = |_: &str, _: &[String]| -> Result<String> { bail!("no such package") };
+        let fake =
+            |_: &str, _: &[String]| -> Result<String> { Err(miette::miette!("no such package")) };
         assert!(check_members(&[member("sul-core", false)], &fake).is_err());
     }
 
