@@ -30,7 +30,7 @@ test("setPresence sends the command name and the small-image asset key", async (
   assert.deepEqual(calls[2], ["discord_set_enabled", { enabled: true, smallImage: undefined }], "an unusable key is dropped, not sent");
 });
 
-test("asset keys are trimmed, printable and bounded (same rules as sul-core)", () => {
+test("asset keys are trimmed, printable and bounded (same rules as sul-launcher)", () => {
   assert.equal(normalizeAssetKey("  corner  "), "corner");
   assert.equal(normalizeAssetKey(""), "");
   assert.equal(normalizeAssetKey("a\u0007b"), "");

@@ -1,7 +1,7 @@
 // A backend for the Tools tab that lives in memory. It is NOT the core: it keeps the shape of the real answers and
 // refuses the few things a test needs refused, with plain-text errors like a failing command. What the core really
 // refuses (a changed tool file, a workspace that is not a finished run, a program that fails to start) is tested in
-// `crates/sul-core/src/builder/tools.rs`, `crates/sul-core/src/manager/tooling.rs` and `src-tauri/src/ipc_tests.rs`.
+// `crates/sul-mod/src/builder/tools.rs`, `crates/sul-app/src/manager/tooling.rs` and `src-tauri/src/ipc_tests.rs`.
 import type {
   KnownTool,
   RunningTool,

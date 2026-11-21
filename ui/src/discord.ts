@@ -5,7 +5,7 @@ export { getInvoker, type Invoker };
 const KEY = "sul.discord";
 const SMALL_KEY = "sul.discord.small";
 
-/** Longest asset key Discord accepts (mirrors `MAX_ASSET_KEY` in sul-core). */
+/** Longest asset key Discord accepts (mirrors `MAX_ASSET_KEY` in sul-launcher). */
 export const MAX_ASSET_KEY = 256;
 
 /** Opt-in: off unless the user switched it on. */

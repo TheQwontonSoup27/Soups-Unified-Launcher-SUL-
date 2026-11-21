@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { messageOf, type GameView } from "./library";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::manager` (serde, snake_case). `src-tauri/src/ipc_tests.rs` pins the
+// Wire types. They mirror `sul_app::manager` (serde, snake_case). `src-tauri/src/ipc_tests.rs` pins the
 // field names from the Rust side.
 // ---------------------------------------------------------------------------
 

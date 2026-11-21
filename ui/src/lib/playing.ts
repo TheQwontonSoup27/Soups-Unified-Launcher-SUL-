@@ -3,7 +3,7 @@ import { messageOf } from "./library";
 import { BUILD_STATE_LABEL, type BuildState } from "./manager";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::runtime` and the `playing` half of `sul_core::manager` (serde). The enums are
+// Wire types. They mirror `sul_builds::runtime` and the `playing` half of `sul_app::manager` (serde). The enums are
 // tagged: `state` for `LaunchState`, `kind` for `Outcome`, `reason` for `NotStarted`. `src-tauri/src/ipc_tests.rs`
 // pins the field names from the Rust side.
 // ---------------------------------------------------------------------------

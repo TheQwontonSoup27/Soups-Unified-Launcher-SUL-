@@ -12,6 +12,10 @@ members = [
     "xtask",
     # Carried over from the V5.1 build and being merged into the layout above (docs/SESSION_STATE.md)
     "crates/sul-core",
+    "crates/sul-launcher",
+    "crates/sul-builds",
+    "crates/sul-mod",
+    "crates/sul-app",
     "crates/sul-net",
     "src-tauri",
 ]
@@ -54,7 +58,7 @@ thiserror = "2.0.11"
 miette = { version = "7.5.0", features = ["fancy"] }
 clap = { version = "4.5.29", features = ["derive"] }
 tracing = "0.1.41"
-# Kept from the V5.1 build (used by sul-core and src-tauri)
+# Kept from the V5.1 build (used by sul-launcher and src-tauri)
 tracing-subscriber = "0.3"
 
 # Crypto, hashing & compression
@@ -88,7 +92,13 @@ windows = { version = "0.59.0", features = [
 ] }
 
 # Workspace crates
+# Layered, each depending only on the ones above it: sul-core <- sul-launcher <- sul-builds <- sul-mod <- sul-app
+# (docs/decisions/0009-sul-core-merge-map.md, docs/decisions/0010-sul-core-split.md).
 sul-core = { path = "crates/sul-core" }
+sul-launcher = { path = "crates/sul-launcher" }
+sul-builds = { path = "crates/sul-builds" }
+sul-mod = { path = "crates/sul-mod" }
+sul-app = { path = "crates/sul-app" }
 
 [profile.dev.package."*"]
 opt-level = 2

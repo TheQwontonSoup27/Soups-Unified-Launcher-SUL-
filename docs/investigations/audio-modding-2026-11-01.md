@@ -57,6 +57,6 @@ Mods page. They were not read, so how that repository relates to the first one i
 - Both tools are **Not investigated** in the capability matrix. Reading three pages is not an assessment of
   feasibility.
 - SUL records an external tool and runs it only if the owner has pointed it at a copy they installed themselves. It
-  does not copy, bundle or download either tool (`crates/sul-core/src/builder/tools.rs`, decision 0007).
+  does not copy, bundle or download either tool (`crates/sul-mod/src/builder/tools.rs`, decision 0007; moved from `sul-core`, decision 0010).
 - The audio part of the Helldivers 2 workflow is not built, and no real game adapter exists yet, so nothing here
   can be tried end to end.

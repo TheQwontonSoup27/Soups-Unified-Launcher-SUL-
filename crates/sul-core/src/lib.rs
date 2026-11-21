@@ -1,66 +1,45 @@
-//! `sul-core`: backend engine for Soups Unified Launcher (SUL).
+//! `sul-core`: the substrate of Soups Unified Launcher (SUL).
 //!
-//! Section 1 of the Step 1 spec (game discovery, matrix, storage, updater, templates):
+//! What every other SUL crate stands on, and nothing that knows about games, builds or mods. It is the lowest of five
+//! crates, each depending only on the ones before it in this list:
 //!
-//! | Spec item                              | Module          |
-//! |----------------------------------------|-----------------|
-//! | Steam headless network layer           | [`steam`]       |
-//! | Registry scanner                       | [`registry`]    |
-//! | Per-game tick-and-compatibility matrix | [`matrix`]      |
-//! | Persisted library (scan + ticks)       | [`library`]     |
-//! | Library service for the UI (scan, matrix, tick) | [`service`] |
-//! | Storage isolator                       | [`storage`]     |
-//! | Baseline tracking & version self-updater | [`updater`]   |
-//! | Engine portability matrix              | [`portability`] |
-//! | Template serialization engine          | [`templates`]   |
+//! 1. `sul-core` (this crate)
+//! 2. `sul-launcher`: finding installed games, the Steam attach layer, the compatibility matrix, the library index
+//! 3. `sul-builds`: managed builds, library roots, game adapters, the launch and runtime manager, the catalogue
+//! 4. `sul-mod`: the mod store, profiles, deploy and purge, recipes, reversible patches, external tools
+//! 5. `sul-app`: the orchestrator the desktop shell's commands call
 //!
-//! Engineering rules from `CLAUDE.md` (safe file operations, recovery, truthful capability labels,
-//! no secrets in logs, opt-in presence):
+//! How the old single crate was divided, and why the cuts were made together: `docs/decisions/0010-sul-core-split.md`.
 //!
-//! | Rule                                              | Module         |
-//! |---------------------------------------------------|----------------|
-//! | Five-status capability labels with an evidence rule | [`capability`] |
-//! | Relative paths and symlinks never escape a root   | [`safepath`]   |
-//! | Protected roots, atomic writes, isolated copies   | [`fsops`]      |
-//! | Interrupted multi-step operations are detectable  | [`journal`]    |
-//! | Structured JSONL logs with secret redaction       | [`logging`]    |
-//! | SHA-256 build manifests, read-only verification   | [`manifest`]   |
-//! | Discord Rich Presence over local IPC (opt-in)     | [`discord`]    |
+//! | What it gives                                                                         | Module          |
+//! |---------------------------------------------------------------------------------------|-----------------|
+//! | The one error type every crate shares (the counterpart of the base error enum in Ch. 1 §3.4) | [`error`] |
+//! | Relative paths and symlinks never escape a root                                       | [`safepath`]    |
+//! | Protected roots, atomic writes, isolated copies                                       | [`fsops`]       |
+//! | Interrupted multi-step operations are detectable                                      | [`journal`]     |
+//! | Structured JSONL logs with secret redaction                                           | [`logging`]     |
+//! | SHA-256 build manifests, read-only verification                                       | [`manifest`]    |
+//! | Integrity checks, package scanning, quarantine, the act-without-asking rule, webhook-address checks | [`trust`] |
+//! | Where each game's isolated data lives                                                 | [`storage`]     |
+//! | Safe Windows file names                                                               | [`names`]       |
+//! | The version log that makes rollback possible                                          | [`updater`]     |
+//! | Standard install or self-contained portable copy                                      | [`portability`] |
+//! | Named, sectioned templates exported to and imported from a folder                     | [`templates`]   |
 //!
-//! Sections 2-4 of the Step 1 spec (UI shell, game hub tabs, overlay) are not represented here yet.
+//! `manifest` and `trust` are kept here for now: the owner has not yet said where they belong
+//! (`docs/decisions/0009-sul-core-merge-map.md`, "Owner answers").
 
-pub mod adapters;
-pub mod builder;
-pub mod builds;
-pub mod capability;
-pub mod catalogue;
-pub mod discord;
 pub mod error;
 pub mod fsops;
-pub mod fsys;
 pub mod journal;
-pub mod library;
 pub mod logging;
-pub mod manager;
 pub mod manifest;
-pub mod matrix;
-pub mod mods;
+pub mod names;
 pub mod portability;
-pub mod process;
-pub mod registry;
-pub mod roots;
-pub mod runtime;
 pub mod safepath;
-pub mod service;
-pub mod steam;
 pub mod storage;
 pub mod templates;
 pub mod trust;
 pub mod updater;
 
-mod names;
-
 pub use error::{Error, Result};
-
-#[cfg(test)]
-mod testkit;

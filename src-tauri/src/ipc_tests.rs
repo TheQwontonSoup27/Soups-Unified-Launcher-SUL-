@@ -9,19 +9,19 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
-use sul_core::registry::{GameScanner, GameSource, InstalledGame};
-use sul_core::service::LibraryService;
-use sul_core::steam::{ClientProbe, SteamManager, UrlOpener};
+use sul_launcher::registry::{GameScanner, GameSource, InstalledGame};
+use sul_launcher::service::LibraryService;
+use sul_launcher::steam::{ClientProbe, SteamManager, UrlOpener};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{
     INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets,
 };
 use tauri::webview::InvokeRequest;
 
-use sul_core::adapters::{AdapterRegistry, GameAdapter, LaunchPlan, ModLayout, Recognition};
-use sul_core::capability::CapabilityEntry;
-use sul_core::process::{Child, ExitInfo, ProcessLauncher, ProcessSpec};
-use sul_core::roots::DiskSpace;
+use sul_builds::adapters::{AdapterRegistry, GameAdapter, LaunchPlan, ModLayout, Recognition};
+use sul_builds::process::{Child, ExitInfo, ProcessLauncher, ProcessSpec};
+use sul_builds::roots::DiskSpace;
+use sul_launcher::capability::CapabilityEntry;
 
 use crate::{DiscordState, commands::AppState, handlers};
 
@@ -102,7 +102,7 @@ impl Child for PretendChild {
         self.polls += 1;
         Ok(None)
     }
-    fn captured(&self) -> Option<sul_core::process::Captured> {
+    fn captured(&self) -> Option<sul_builds::process::Captured> {
         None
     }
 }
@@ -634,7 +634,7 @@ fn presence_without_an_application_id_explains_what_is_missing_and_connects_to_n
 }
 
 // ---------------------------------------------------------------------------------------------
-// Module 1: library folders and managed builds
+// Library folders and managed builds
 // ---------------------------------------------------------------------------------------------
 
 /// A library whose one game lives in a real folder under `dir`, scanned once so the library lists it.
@@ -1028,7 +1028,7 @@ fn a_game_found_by_a_scan_is_protected_at_once_so_a_root_inside_it_is_refused() 
     assert!(!install.join("data/.sul-root.json").exists());
 }
 
-// ---- Mods (spec 2.1) ----
+// ---- Mods (old spec 2.1) ----
 
 /// A made-up adapter for the made-up game of `real_game_shell`. It is not a real game's adapter.
 struct TinyAdapter;

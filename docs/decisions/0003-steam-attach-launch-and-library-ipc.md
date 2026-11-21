@@ -19,7 +19,7 @@ Date: 2026-10-27 · Status: accepted by owner (architecture rules given in the r
 So rule 4's "launch through the client pipe" cannot be done with the crate. Both routes end in the same `steam://run/<id>` request,
 which the operating system hands to the running Steam client or uses to start Steam first.
 
-## Implementation (`crates/sul-core/src/steam.rs`)
+## Implementation (`crates/sul-launcher/src/steam.rs`)
 - `SteamManager`: thread-safe, cheap to clone, one shared state. `launch_steam_game(app_id) -> Result<(), String>` as requested;
   `launch(app_id) -> Result<LaunchRoute>` also says which situation it found (`RunningClient` / `StartedSteam`). One launch at a time.
   App id 0 is refused. A poisoned lock is recovered rather than wedging the manager.
@@ -32,10 +32,10 @@ which the operating system hands to the running Steam client or uses to start St
 - The `steam` feature stays **off by default**: on Windows the executable then links `steam_api64.dll` and will not start without it.
   CI compiles the feature (clippy) but does not run its tests.
 
-## Library IPC (`crates/sul-core/src/service.rs`, `src-tauri/src/commands.rs`)
+## Library IPC (`crates/sul-launcher/src/service.rs`, `src-tauri/src/commands.rs`)
 - Commands: `scan_games_command`, `get_game_matrix`, `update_feature_tick`, `launch_game_command` as requested, plus `list_games`
   (the saved library without a scan, so the page opens instantly and keeps its ticks when a scan cannot run).
-- All rules live in `sul-core`: the matrix refuses a tick it does not allow (Steam headless on a non-Steam game), unknown games and
+- All rules live in `sul-launcher`: the matrix refuses a tick it does not allow (Steam headless on a non-Steam game), unknown games and
   feature ids are refused, and a change is saved atomically before it becomes the live state. The UI only explains the rules.
 - The library file lives in the data folder: next to the app in portable mode, the per-user app data folder otherwise.
   A library file that cannot be parsed is renamed to `library.json.corrupt-<unix time>` before an empty one starts.

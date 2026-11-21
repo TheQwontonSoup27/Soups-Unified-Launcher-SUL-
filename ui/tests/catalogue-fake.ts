@@ -1,7 +1,7 @@
 // A backend for the catalogue and the game details that lives in memory. It is NOT the core: it keeps the shape of the real
 // answers and mirrors the few rules a test needs (names are trimmed and a repeat that differs only in ASCII case is dropped;
 // a blank or over-long name, a path that is not an image file and a blank path are refused with the core's sentences).
-// What the core really enforces is tested in `crates/sul-core/src/catalogue.rs`, `crates/sul-core/src/manager/cataloguing.rs`
+// What the core really enforces is tested in `crates/sul-builds/src/catalogue.rs`, `crates/sul-app/src/manager/cataloguing.rs`
 // and `src-tauri/src/ipc_tests.rs`.
 import type { CatalogueApi, CatalogueView, CategoryView, Edited, EntryView, GameDetail } from "../src/lib/catalogue";
 import type { GameView } from "../src/lib/library";

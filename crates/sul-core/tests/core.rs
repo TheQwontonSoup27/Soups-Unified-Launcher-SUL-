@@ -2,7 +2,6 @@ use serde_json::json;
 use std::fs;
 use std::path::Path;
 use sul_core::Error;
-use sul_core::capability::{CapabilityEntry, Status};
 use sul_core::fsops::{ProtectedRoots, atomic_write, isolated_copy};
 use sul_core::journal::Journal;
 use sul_core::logging::{Logger, redact};
@@ -86,20 +85,6 @@ fn join_within_rejects_junction_escape() {
     assert!(join_within(root.path(), "link/file.txt").is_err());
     assert!(join_within(root.path(), "link").is_err());
     assert!(join_within(root.path(), "plain/file.txt").is_ok());
-}
-
-// ---- capability ----
-#[test]
-fn supported_tested_requires_evidence() {
-    let mut c = CapabilityEntry::not_investigated("launch", "helldivers2");
-    assert_eq!(c.status, Status::NotInvestigated);
-    assert!(c.validate().is_ok());
-    c.status = Status::SupportedTested;
-    assert!(c.validate().is_err());
-    c.test_date = Some("2026-10-22".into());
-    assert!(c.validate().is_err());
-    c.evidence = Some("logs/run1.jsonl".into());
-    assert!(c.validate().is_ok());
 }
 
 // ---- manifest ----

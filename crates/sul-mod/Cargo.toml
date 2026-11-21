@@ -1,0 +1,21 @@
+[package]
+name = "sul-mod"
+description = "The mod store, profiles, deploy and purge, build recipes, reversible patches and external tools for Soups Unified Launcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sul-core.workspace = true
+sul-launcher.workspace = true
+sul-builds.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+sul-builds = { workspace = true, features = ["test-support"] }

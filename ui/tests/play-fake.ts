@@ -1,10 +1,10 @@
 // A backend for the Play panel that lives in memory. It is NOT the core: it keeps the shape of the real answers and
 // mirrors the few refusals a test needs (no such build, no adapter, not ready, already running). What the core really
-// refuses, and when a program is really started, is tested in `crates/sul-core/src/runtime.rs`,
-// `crates/sul-core/src/manager/playing.rs` and `src-tauri/src/ipc_tests.rs`.
+// refuses, and when a program is really started, is tested in `crates/sul-builds/src/runtime.rs`,
+// `crates/sul-app/src/manager/playing.rs` and `src-tauri/src/ipc_tests.rs`.
 import type { GameLaunch, LaunchRecord, LaunchView, NotStarted, PlayApi, PlayBuild, Refreshed, Started } from "../src/lib/playing";
 
-/** The sentences the core gives for each refusal (see `NotStarted::explain` in `crates/sul-core/src/runtime.rs`). */
+/** The sentences the core gives for each refusal (see `NotStarted::explain` in `crates/sul-builds/src/runtime.rs`). */
 export const NOT_STARTED_TEXT: Record<NotStarted["reason"], string> = {
   no_such_build: "SUL has no build with that id.",
   already_running: "This game is already running. SUL starts one copy of a game at a time.",

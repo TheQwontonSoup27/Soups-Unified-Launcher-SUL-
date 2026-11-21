@@ -6,9 +6,9 @@ use std::sync::Mutex;
 mod commands;
 
 use serde::Serialize;
-use sul_core::capability::Status;
-use sul_core::discord::{IpcTransport, Presence, PublishOutcome, RichPresence};
 use sul_core::portability::{self, InstallMode};
+use sul_launcher::capability::Status;
+use sul_launcher::discord::{IpcTransport, Presence, PublishOutcome, RichPresence};
 use tauri::Manager;
 
 /// Environment variable that overrides the detected app root (useful in development,

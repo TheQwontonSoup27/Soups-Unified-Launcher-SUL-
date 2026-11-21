@@ -1,7 +1,7 @@
 // A backend for the Builder tab that lives in memory. It is NOT the core: it keeps the shape of the real answers and
 // refuses the few things a test needs refused, with plain-text errors like a failing command. What the core really
 // refuses (a stale recipe, a patch that does not fit its file, a mod that is not stored, a game with no adapter) is
-// tested in `crates/sul-core/src/builder/` and `src-tauri/src/ipc_tests.rs`.
+// tested in `crates/sul-mod/src/builder/` and `src-tauri/src/ipc_tests.rs`.
 import { createHash } from "node:crypto";
 import type { BuilderApi, BuilderView, ModFile, ModFileList, Recipe, RecipeView, RunPlan, RunRecord } from "../src/lib/builder";
 import { modRoot, mod } from "./mods-fake";

@@ -1,6 +1,6 @@
 # SESSION STATE: check this first on every run
 
-Last updated: 2026-11-20, end of the network-rule step and the `sul-core` consult. Branch: `rebuild/r0-bootstrap` (nothing is on `main`).
+Last updated: 2026-11-21, end of the `sul-core` split (all four cuts in one commit). Branch: `rebuild/r0-bootstrap` (nothing is on `main`).
 
 In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's standing preference is that a log they assign is read at the start of every run and updated at the end of each milestone. Read order: this file, then `CLAUDE.md`, then `HANDOFF.md` (working notes about the owner and the environment; where it disagrees with the new spec, the new spec wins), then only the scoped parts of the spec that the task needs.
 
@@ -8,7 +8,7 @@ In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's stan
 
 - **Merge, new design wins.** The old `crates/sul-core` (and the rest of the V5.1 build) is merged into the new design: keep every old feature and design choice that does not contradict the new design; the new design's code takes precedence and old code must not override it; the result must be compatible. Nothing is parked in a `legacy/` folder.
 - **`sul-core` is not just renamed (2026-11-19).** Look into the old code, judge what can and cannot be implemented under the new plans, then merge it or rewrite the core, and delete the old traces of the old build.
-- **The split plan is approved (2026-11-20): split now, in dependency order.** Crates `sul-core` (substrate), `sul-launcher`, `sul-builds`, `sul-mod`, `sul-app`; `manifest` and `trust/*` placed last; old-spec references in doc comments are rewritten as each module moves. Details and the module-by-module map: `docs/decisions/0009-sul-core-merge-map.md` ("Owner answers"). No code has moved yet.
+- **The split plan is approved (2026-11-20): split now, in dependency order.** Crates `sul-core` (substrate), `sul-launcher`, `sul-builds`, `sul-mod`, `sul-app`; `manifest` and `trust/*` placed last; old-spec references in doc comments are rewritten as each module moves. Details and the module-by-module map: `docs/decisions/0009-sul-core-merge-map.md` ("Owner answers"). **Done 2026-11-21, all four cuts in one commit** (the owner's choice: launcher-first left `adapters` and `catalogue` in `sul-core` needing `sul-launcher`, which needs `sul-core`): `docs/decisions/0010-sul-core-split.md`.
 - **Network rule (2026-11-19): swap now.** The old no-network CI rule is replaced by the new spec's declared-surface checks. Done, see below.
 - **Portable mode stays (2026-11-19)** (`portable.marker`); the owner wants it later for another portable version of the app.
 - **Cleanup first.** Redundant files are removed before commits (done, see below). Old research stays: decisions `0001` to `0009`, investigations, capability matrix, `references.md`, design images.
@@ -36,23 +36,37 @@ In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's stan
 - Trimmed `HANDOFF.md` (stale read order, the old "where things stand", and the first-message template went, the V5.1 directions list was condensed to one bullet pointing at decision 0006; owner and environment notes stayed; `main`'s commit was corrected to `cc29fcb`).
 - **Redundancy scan of the repository (248 tracked files):** no junk, no empty files, one byte-identical pair (`src-tauri/icons/128x128@2x.png` and `ui/public/logo.png`: different consumers, kept). All 12 feature branches on GitHub have zero commits that `main` lacks (checked through the GitHub compare API); none was deleted.
 
+**The `sul-core` split (2026-11-21, decision `0010`):**
+
+- The old `sul-core` is now five layered crates: `sul-core` <- `sul-launcher` <- `sul-builds` <- `sul-mod` <- `sul-app`. `manifest` and `trust/*` stay in `sul-core` until the owner decides where they go. Every moved file went with `git mv`; tests moved with their modules.
+- Coverage kept: `write_sites.rs` scans all five crates; CI job `core` lints and tests all five; the `steam` compile check targets `sul-launcher`; the UI no-network test looks at all five manifests (its assertion about `discord.rs` followed the file).
+- New: a `test-support` feature on `sul-builds` for the shared test fixtures, a guard test that only dev-dependencies may switch it on (deliberate break: CAUGHT), `Default` for three public fixtures, and a UI check widened to every crate manifest (deliberate break with a network crate in `sul-mod`: CAUGHT).
+- Found and fixed before committing, both invisible to a workspace test run: `sul-app` could not build its own tests alone (a missing dev-dependency feature), and `clippy -D warnings` failed on three fixtures that became public.
+- Old-spec references in the moved crates and the shell were rewritten to new chapters, or flagged where the new spec has no counterpart (decision 0010, section 5). One user-visible sentence and the window's "Module N" labels were left on purpose (section 6).
+- Docs: decision 0010 written; pointers updated in 0009, 0003, 0008, `HANDOFF.md`, `SETUP-WINDOWS.md`, the capability matrix, the audio-modding note and `references.md` (which still cited the removed `PROJECT_SPEC.md`). Decisions 0001 to 0007 are history and were left as written.
+
 ## Verification (run in the Linux container, rustc 1.97)
+
+Re-run 2026-11-21 in a fresh session on the working tree, immediately before the split was committed (the earlier session had finished the split but never made the commit, so `git log` stopped at `ee7bbc4`): every row below reproduced exactly (clippy with `-D warnings` and with `--features steam`, each package's tests built alone, 637 + 56 Rust tests, 601 UI tests, `fmt` clean, all five xtask gates exit 0). A redundancy scan of the tree before committing found nothing new: no junk, no empty files or directories, nothing left in `crates/sul-core` that belongs to another crate, and the same single byte-identical image pair as before.
 
 | Command | Result |
 |---|---|
 | `cargo check --workspace --locked` | pass |
 | `cargo fmt --all --check` | clean |
-| `cargo clippy -p xtask --all-targets --locked -- -D warnings` | pass |
-| `cargo test --workspace --exclude sul-tauri --locked` | 636 passed, 0 failed (618 `sul-core`, 4 new substrate crates, 14 `xtask`) |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings`, and `-p sul-launcher --features steam` | pass (after the three `Default` fixes) |
+| `cargo test -p <pkg> --locked --no-run` for each of `sul-core`, `sul-launcher`, `sul-builds`, `sul-mod`, `sul-app`, `sul-tauri` | each builds its tests alone |
+| `cargo test --workspace --exclude sul-tauri --locked` | 637 passed, 0 failed (636 before the split, plus the one new `test-support` guard; per-package table in decision 0010, section 4) |
 | `cargo test -p sul-tauri --locked` | 56 passed, 0 failed |
 | `cargo xtask config-check`, `electron-audit`, `ac-regression`, `release-check --release R0`, `pipeline --release R0` | all exit 0 (see gap 2) |
-| UI: `npm run ui:typecheck`, `npm test --workspace ui`, `npm run ui:build` | pass; 601 of 601 tests (615 before, minus the 14 for the removed script) |
+| UI: `npm run ui:typecheck`, `npm test --workspace ui`, `npm run ui:build` | pass; 601 of 601 tests (unchanged) |
+| *Rows below are earlier commits, kept as history* | |
 | GitHub Windows CI, commit `fdbd37c` (run 44696191567) | **`r0-substrate` failed**; `core`, `ui`, `tauri-shell` passed. Cause: `xtask/src/network.rs` did not compile on the runner's newer stable Rust ("trailing semicolon in macro used in expression position", `miette::bail!` as the last expression of a function and of a test closure). The container's rustc 1.97 does not report it (gap 7). |
 | GitHub Windows CI, commit `abedb93` (run 44697710404, the fix) | **all four jobs success**: `r0-substrate` (fmt, clippy, tests, and the xtask gates including the network guard on Windows), `core`, `ui`, `tauri-shell`. First run of the guard on Windows. |
+| GitHub Windows CI, the split commit | **pending**: not yet read. Do not call the split done until all four jobs are green (see Next). |
 
 ## Known gaps (do not claim past these)
 
-1. **Windows-only code cannot be compiled in this container** (the Windows toolchain cannot be downloaded). The Windows tests in `sul-core` (`windows_system`) run zero tests here. GitHub's Windows CI is the only check for them and for the Win32 layers (R0 layers 4 to 6). The network guard's `cargo tree --target x86_64-pc-windows-msvc` was run here; it needs no Windows toolchain, but its first run on the Windows runner is part of the pending CI result.
+1. **Windows-only code cannot be compiled in this container** (the Windows toolchain cannot be downloaded). The Windows tests in `sul-launcher` (`tests/windows_system.rs`, 12 tests) run zero tests here. GitHub's Windows CI is the only check for them and for the Win32 layers (R0 layers 4 to 6). The network guard's `cargo tree --target x86_64-pc-windows-msvc` was run here; it needs no Windows toolchain, but its first run on the Windows runner is part of the pending CI result.
 2. **The xtask gates are still thin.** `ac-regression` has two real guards (workspace manifest, network surfaces); structural refusals, crate boundaries, feature orthogonality and Windows-only IPC are not implemented. `release-check` checks edition, MSRV and the word "electron" only; it does not read `SUL-LEDGER/releases.md`. `bench-telemetry`, `simulate-config` and `plan` do nothing. Their output now says so. A green gate does not yet mean R0 conforms. Making them real is R0 layer 2.
 3. **`sul-wire` alignment:** `rkyv` needs aligned input and the ring's `try_pop` returns a plain `Vec<u8>`. The test passes, but nothing guarantees alignment. Harden in layer 1 and add a test.
 4. **The old no-network tripwires that remain.** `crates/sul-core/tests/write_sites.rs` (keeps `sul-net` empty and unreferenced) and `ui/tests/no-network.test.ts` (no network API in the window's source) were left on purpose: they are stricter than the guard and still true. They change in the commit that adds the first network dependency, together with the Security & Trust page text.
@@ -60,17 +74,13 @@ In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's stan
 6. **The source part of the guard reads text, not syntax.** It can miss a networking call that does not name one of its patterns, and it does not look inside WebView2, the standard library or Steam.
 7. **The container's compiler is older than CI's.** The container has rustc 1.97.0 and cannot download a newer one (static.rust-lang.org is blocked); the Windows runner uses the current `stable` (`rust-toolchain.toml` says `stable`). A lint that only warns here can be a hard error there, so a green container run is not a green CI run. Always read the Windows result before calling a step done. CI also warns about two unused dependencies from the supplied scaffold (`ed25519-dalek` in `sul-trust`, `thiserror` in `xtask`); they are meant for later layers and were left alone.
 
+8. **Old-spec wording the owner has not been asked about.** A sentence shown in the window (`crates/sul-mod/src/builder/tools.rs`, "the tool spec 2.4 means") and the window's module labels "Module 1" and "Module 2" (`ui/src/modules/registry.tsx`, `ui/src/views/ModsView.tsx`) still use the old spec's words. Changing either changes what the owner sees. Old-spec comments also remain in the modules that did not move (`templates`, `storage`, `updater`, `portability`, `manifest`, `trust/policy`). Details: decision 0010, section 6.
+
 ## Next
 
-1. **Move 1: extract `sul-launcher`** (plan approved; stop and report when it is done). The modules `fsys`, `registry`, `steam`, `library`, `matrix`, `capability`, `service` and `discord` leave `crates/sul-core` with `git mv`; `tests/steam.rs` and `tests/discord.rs` go with them; the `steam` feature and the `winreg` dependency move; `src-tauri` paths change from `sul_core::...` to `sul_launcher::...` (about 14 module paths in `commands.rs`, `lib.rs`, `ipc_tests.rs`). In the same commit:
-   - `crates/sul-core/tests/write_sites.rs`: scan roots and allowlist paths follow the files, otherwise the moved files are no longer covered;
-   - `.github/workflows/ci.yml`, job `core`: add `-p sul-launcher` to the test, clippy and `steam`-feature steps, otherwise moved code is no longer tested;
-   - doc comments that cite the old spec are rewritten to the new chapters; anything that cannot be matched is flagged, not given an invented citation;
-   - the workspace test total must stay the same (636 in the container, plus the 56 in `sul-tauri` and 601 in the UI): count before and after.
-   Verify in the container, then read the Windows CI result (gap 7) before reporting.
-2. Moves 2 to 5, one per report, in this order: `sul-builds` (settle the `testkit` question first), `sul-mod`, `sul-app`.
-3. Read Ch. 14 §2.13 and Ch. 3 §2.13, then ask the owner where `manifest` and `trust/*` go (they stay in `sul-core` until then).
-4. Ask the owner to add the Discord webhook and the Steam Web API to the declared network list (gap 5) before any code calls them.
-5. R0 layers 1 and 2: harden `sul-ipc-types` and `sul-wire` (gap 3), make the xtask gates real (gap 2).
+1. **Read the Windows CI result for the split commit** (gap 7) and record it in the Verification table. If a job failed, the cause is in the job annotations (`.github/scripts/surface-failure.ps1`). The split is not done until all four jobs are green.
+2. **Ask the owner where `manifest` and `trust/*` go** (they are in `sul-core` today; decision 0009, step 6). Read Ch. 14 §2.13 and Ch. 3 §2.13 first. Likely `sul-trust` / `sul-quarantine` (encrypted, 0009 point 4.4) and builds. The old-spec comments in those modules and in `templates`, `storage`, `updater` and `portability` are rewritten when they move.
+3. Ask the owner (a) whether to change the user-visible sentence in `tools.rs` and the window's "Module N" labels (gap 8), and (b) to add the Discord webhook and the Steam Web API to the declared network list (gap 5) before any code calls them.
+4. R0 layers 1 and 2: harden `sul-ipc-types` and `sul-wire` (gap 3), make the xtask gates real (gap 2).
 
-Next command: `cargo check --workspace --locked` (to confirm the baseline is still green), then move 1.
+Next command: `gh run list --branch rebuild/r0-bootstrap` (read the split commit's Windows run), then `cargo check --workspace --locked` to confirm the baseline is still green.

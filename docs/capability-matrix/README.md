@@ -1,9 +1,11 @@
 # Capability matrix
 
 Rule: nothing is "Supported and tested" without a test date and an evidence pointer
-(enforced by `sul-core::capability::CapabilityEntry::validate` and mirrored in `ui/src/capabilities.ts`).
+(enforced by `sul_launcher::capability::CapabilityEntry::validate` and mirrored in `ui/src/capabilities.ts`).
 Per-game rows in the app derive their label from the compatibility verdict plus an evidence claim
 (`FeatureState::status`), so a label cannot say more than the evidence does.
+
+Note, 2026-11-21: the crate `sul-core` that the rows below name was split into five crates (decision 0010). Each row keeps the crate name that was true on its test date and no evidence date was changed. Where the code is now: game discovery, Steam, the tick matrix, capability labels, the library index and Discord presence are in `sul-launcher`; builds, library roots, adapters, the launch manager and the catalogue in `sul-builds`; mods, recipes, patches and tools in `sul-mod`; the manager service in `sul-app`; safe files, journal, logging, manifests and trust checks stay in `sul-core`. The tests moved unchanged.
 
 Reset on 2026-10-26: the earlier rows cited a GitHub Actions run on the code that Step 1.5 replaced, so that evidence no longer applies.
 Evidence below is the Linux-container runs of 2026-10-26 plus GitHub Actions run 40276520399 (commit 04c968f, windows-latest: fmt,

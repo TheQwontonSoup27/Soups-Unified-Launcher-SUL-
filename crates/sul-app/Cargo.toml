@@ -1,0 +1,23 @@
+[package]
+name = "sul-app"
+description = "The orchestrator that the desktop shell's commands call: it ties the library, builds, mods and the launch manager together"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sul-core.workspace = true
+sul-launcher.workspace = true
+sul-builds.workspace = true
+sul-mod.workspace = true
+serde.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+# The fake launcher and the adapter fixtures that this crate's tests use. Only a dev-dependency may turn this on
+# (`crates/sul-core/tests/write_sites.rs` checks that).
+sul-builds = { workspace = true, features = ["test-support"] }

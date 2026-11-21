@@ -1,0 +1,28 @@
+[package]
+name = "sul-launcher"
+description = "Game discovery, the Steam attach layer, the compatibility matrix, the library index and Discord presence for Soups Unified Launcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# Real Steamworks bindings. Off by default: on Windows the resulting exe links
+# against steam_api64.dll and will not start unless that DLL sits beside it.
+steam = ["dep:steamworks"]
+
+[dependencies]
+sul-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+steamworks = { version = "0.13", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
+[dev-dependencies]
+tempfile = "3"
+tracing-subscriber.workspace = true

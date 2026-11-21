@@ -16,14 +16,14 @@ export const STATUS_HELP: Record<Status, string> = {
   not_investigated: "No adequate feasibility assessment yet.",
 };
 
-/** Strongest first: the order a legend lists the labels in (mirrors `Status::ALL` in sul-core). */
+/** Strongest first: the order a legend lists the labels in (mirrors `Status::ALL` in sul-launcher). */
 export const STATUS_ORDER: Status[] = ["supported_tested", "partial", "experimental", "unsupported", "not_investigated"];
 
 const STRENGTH: Record<Status, number> = { unsupported: 0, not_investigated: 1, experimental: 2, partial: 3, supported_tested: 4 };
 
 /**
  * The headline rule: a set of capabilities is only as good as its weakest member, so a summary
- * can never overclaim. An empty set is "not investigated". Mirrors `Status::weakest` in sul-core.
+ * can never overclaim. An empty set is "not investigated". Mirrors `Status::weakest` in sul-launcher.
  */
 export function weakestStatus(statuses: Iterable<Status>): Status {
   let weakest: Status | null = null;
@@ -31,7 +31,7 @@ export function weakestStatus(statuses: Iterable<Status>): Status {
   return weakest ?? "not_investigated";
 }
 
-/** Mirrors sul-core's rule: "Supported and tested" needs a test date and evidence. */
+/** Mirrors sul-launcher's rule: "Supported and tested" needs a test date and evidence. */
 export function validateCapability(c: CapabilityEntry): string | null {
   if (c.status === "supported_tested" && (!c.testDate?.trim() || !c.evidence?.trim())) {
     return `capability '${c.feature}' for '${c.game}' claims supported_tested without testDate and evidence`;
@@ -45,7 +45,7 @@ const base = (feature: string, game: string, status: Status, limitations: string
 
 /**
  * MOCK DATA for browser development only. Nothing here has been tested.
- * Real data will come from sul-core adapters through the Tauri bridge.
+ * Real data will come from the sul-builds adapters through the Tauri bridge.
  */
 export const MOCK_CAPABILITIES: CapabilityEntry[] = [
   base("Build isolation", "Helldivers 2", "not_investigated", ["Target build 7.1.1; separate adapter track"]),

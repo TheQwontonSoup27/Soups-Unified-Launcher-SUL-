@@ -53,7 +53,7 @@ Spec 2.5 and later, Module 3 onward, any real game adapter, acquisition of build
 
 ## Slice A, built 2026-11-04 (library folders and managed builds)
 
-What was built, as planned: `sul-core::manager::ManagerService`; nine commands (`manager_view`, `manager_add_root`, `manager_relink_root`,
+What was built, as planned: `sul-core::manager::ManagerService` (now `sul_app::manager::ManagerService`, decision 0010); nine commands (`manager_view`, `manager_add_root`, `manager_relink_root`,
 `manager_forget_root`, `manager_import_build`, `manager_register_in_place`, `manager_verify_build`, `manager_activate_build`,
 `manager_rollback_slot`); and the Folders and Builds panels on the Game Library page.
 

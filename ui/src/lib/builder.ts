@@ -4,7 +4,7 @@ import { slugId, type RootView } from "./manager";
 import { formatSize, type ModView, type VerifyReport } from "./mods";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::builder` (recipe, patch, book) and `sul_core::manager` (the `building` part),
+// Wire types. They mirror `sul_mod::builder` (recipe, patch, book) and `sul_app::manager` (the `building` part),
 // serde, snake_case. `src-tauri/src/ipc_tests.rs` pins the field names from the Rust side.
 // ---------------------------------------------------------------------------
 

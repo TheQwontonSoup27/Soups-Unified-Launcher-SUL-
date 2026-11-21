@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { Status } from "../types";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::service` (serde, snake_case); the Rust side has a test
+// Wire types. They mirror `sul_launcher::service` (serde, snake_case); the Rust side has a test
 // that pins these names.
 // ---------------------------------------------------------------------------
 

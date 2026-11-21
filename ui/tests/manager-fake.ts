@@ -1,6 +1,6 @@
 // A backend for the folders-and-builds panel that lives in memory. It is NOT the core: it only keeps the shape of
 // the real answers and refuses the few things a test needs refused, with plain-text errors like a failing command.
-// What the core really refuses is tested in `crates/sul-core/src/manager.rs` and `src-tauri/src/ipc_tests.rs`.
+// What the core really refuses is tested in `crates/sul-app/src/manager.rs` and `src-tauri/src/ipc_tests.rs`.
 import type { BuildRequest, BuildView, BuiltView, ManagerApi, ManagerView, RootKind, RootView, VerifiedView } from "../src/lib/manager";
 
 export const EMPTY_VIEW: ManagerView = { roots: [], builds: [], slots: [], retired: [], interrupted: [] };

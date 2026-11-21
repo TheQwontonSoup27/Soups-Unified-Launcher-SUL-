@@ -5,7 +5,7 @@ import type { LaunchState } from "./playing";
 import type { Status } from "../types";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::catalogue` (the detail) and the `cataloguing` half of `sul_core::manager` (serde).
+// Wire types. They mirror `sul_builds::catalogue` (the detail) and the `cataloguing` half of `sul_app::manager` (serde).
 // `src-tauri/src/ipc_tests.rs` pins the field names from the Rust side.
 // ---------------------------------------------------------------------------
 

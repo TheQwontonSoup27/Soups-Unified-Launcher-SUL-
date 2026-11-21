@@ -1,7 +1,7 @@
 //! Helpers for turning user-supplied text into safe Windows file names.
 
 /// Device names Windows refuses as file names, with or without an extension.
-pub(crate) fn is_reserved_windows_name(stem: &str) -> bool {
+pub fn is_reserved_windows_name(stem: &str) -> bool {
     let upper = stem.trim_end_matches([' ', '.']).to_ascii_uppercase();
     let base = upper.split('.').next().unwrap_or("");
     matches!(base, "CON" | "PRN" | "AUX" | "NUL")

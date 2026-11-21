@@ -66,7 +66,7 @@ pub fn join_within(root: &Path, rel: &str) -> Result<PathBuf> {
 /// the OS); the remaining components are appended with `.` and `..` applied lexically, which
 /// is how Windows treats them before the filesystem is consulted. Use this to decide whether
 /// a *future* write location lies inside or outside a directory of interest.
-pub(crate) fn resolve_lenient(path: &Path) -> PathBuf {
+pub fn resolve_lenient(path: &Path) -> PathBuf {
     let parts: Vec<Component> = path.components().collect();
     for split in (1..=parts.len()).rev() {
         let prefix: PathBuf = parts[..split].iter().collect();

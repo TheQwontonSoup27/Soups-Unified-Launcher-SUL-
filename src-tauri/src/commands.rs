@@ -9,24 +9,24 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use sul_core::adapters::AdapterRegistry;
-use sul_core::builder::recipe::{Recipe, RunPlan, RunRecord};
-use sul_core::builder::tools::{StoredRunRecords, ToolRunPlan};
-use sul_core::catalogue::GameDetail;
-use sul_core::manager::{
+use sul_app::manager::{
     BuildSource, BuilderView, BuiltView, CatalogueView, Deployed, Edited, GameRef, LaunchView,
     ManagerService, ManagerView, ModFileList, ModSource, ModVerified, ModsView, ProfileEdit,
     Purged, PurgedAndDeployed, RecipeRan, Refreshed, STATE_FOLDER, Started, ToolChecked,
     ToolPolled, ToolRegisterRequest, ToolRunRequest, ToolStarted, ToolsView, Undone, VerifiedView,
     WorkspaceRef,
 };
+use sul_builds::adapters::AdapterRegistry;
+use sul_builds::catalogue::GameDetail;
+use sul_builds::process::{ProcessLauncher, StdLauncher};
+use sul_builds::roots::{DiskSpace, RootKind, SystemDiskSpace};
 use sul_core::manifest::{Variant, VerifyReport};
-use sul_core::mods::deploy::{DeployPlan, PurgePlan};
-use sul_core::process::{ProcessLauncher, StdLauncher};
-use sul_core::registry::{GameScanner, ScanOptions, system_scanner};
-use sul_core::roots::{DiskSpace, RootKind, SystemDiskSpace};
-use sul_core::service::{GameView, LibraryService, MatrixView, ScanView};
-use sul_core::steam::SteamManager;
+use sul_launcher::registry::{GameScanner, ScanOptions, system_scanner};
+use sul_launcher::service::{GameView, LibraryService, MatrixView, ScanView};
+use sul_launcher::steam::SteamManager;
+use sul_mod::builder::recipe::{Recipe, RunPlan, RunRecord};
+use sul_mod::builder::tools::{StoredRunRecords, ToolRunPlan};
+use sul_mod::mods::deploy::{DeployPlan, PurgePlan};
 use tauri::State;
 
 /// What the commands share, built once at startup. Cloning is cheap and every clone shares the
@@ -36,7 +36,7 @@ pub struct AppState {
     /// The library, or why it could not be opened. The app still starts without it, and each
     /// command then reports the reason instead of the whole app failing.
     library: Result<Arc<LibraryService>, String>,
-    /// Library folders and managed builds (spec Module 1), kept in `managed/` beside the library file.
+    /// Library folders and managed builds (old spec Module 1; no counterpart in the new spec, `docs/decisions/0009` row B), kept in `managed/` beside the library file.
     manager: Result<Arc<ManagerService>, String>,
     steam: SteamManager,
 }
@@ -255,7 +255,7 @@ pub async fn launch_game_command(app_id: u32, state: State<'_, AppState>) -> Res
 }
 
 // ---------------------------------------------------------------------------------------------
-// Module 1: library folders and managed builds (spec 1.2, 1.3, 1.5)
+// Library folders and managed builds (old spec 1.2, 1.3, 1.5)
 // ---------------------------------------------------------------------------------------------
 
 /// The library folders, managed builds, active slots, old copies and operations that never finished.
@@ -394,7 +394,7 @@ pub async fn manager_rollback_slot(
     .await
 }
 
-// ---- Mods (spec 2.1) ----
+// ---- Mods (old spec 2.1) ----
 
 /// The mod store, the profiles, and the mod state of every managed build.
 #[tauri::command]
@@ -660,7 +660,7 @@ pub async fn builder_mod_files(
     .await
 }
 
-/// The recorded tools, what is known about the two tools spec 2.4 names, the finished recipe runs a tool can work
+/// The recorded tools, what is known about the two tools that old spec 2.4 names, the finished recipe runs a tool can work
 /// in, and the tools being followed. Reads no tool file.
 #[tauri::command]
 pub async fn tools_view(state: State<'_, AppState>) -> Result<ToolsView, String> {
@@ -859,7 +859,7 @@ pub async fn catalogue_set_artwork(
 mod tests {
     use std::sync::Mutex;
 
-    use sul_core::steam::{ClientProbe, UrlOpener};
+    use sul_launcher::steam::{ClientProbe, UrlOpener};
 
     use super::*;
 

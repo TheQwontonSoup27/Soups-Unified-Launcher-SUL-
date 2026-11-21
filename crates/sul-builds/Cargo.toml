@@ -1,0 +1,26 @@
+[package]
+name = "sul-builds"
+description = "Managed game builds, library roots, game adapters, the launch and runtime manager and the catalogue for Soups Unified Launcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[features]
+default = []
+# Shared test fixtures (`testkit`, `roots::fake`, `process::fake`, `adapters::fixtures`): a library on a temporary disk
+# with a made-up game, and a fake launcher. They are used by this crate's own tests and by the tests of the crates above
+# it (`sul-mod` and `sul-app` turn this on in their dev-dependencies). No shipped package may enable it
+# (`crates/sul-core/tests/write_sites.rs` checks that).
+test-support = ["dep:tempfile"]
+
+[dependencies]
+sul-core.workspace = true
+sul-launcher.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile = { version = "3", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

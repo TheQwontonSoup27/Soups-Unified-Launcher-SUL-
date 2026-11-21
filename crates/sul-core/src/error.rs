@@ -87,14 +87,16 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
-    pub(crate) fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
+    /// An [`Error::Io`] that names the file the failure was about.
+    pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::Io {
             path: path.into(),
             source,
         }
     }
 
-    pub(crate) fn json(path: impl Into<PathBuf>, source: serde_json::Error) -> Self {
+    /// An [`Error::Json`] that names the file that could not be read or written as JSON.
+    pub fn json(path: impl Into<PathBuf>, source: serde_json::Error) -> Self {
         Self::Json {
             path: path.into(),
             source,
@@ -104,7 +106,7 @@ impl Error {
 
 /// `map_err` adapter that attaches the path to an I/O failure:
 /// `std::fs::read(p).map_err(io(p))`.
-pub(crate) fn io<P: Into<PathBuf>>(path: P) -> impl FnOnce(std::io::Error) -> Error {
+pub fn io<P: Into<PathBuf>>(path: P) -> impl FnOnce(std::io::Error) -> Error {
     let path = path.into();
     move |source| Error::Io { path, source }
 }

@@ -10,6 +10,8 @@
 //! 3. That type cannot be written to a file by accident: it does not derive `Serialize` or `Deserialize`.
 //! 4. No crate for a credential store or a network client is declared, because neither is built yet. Whoever adds one
 //!    must update the page's wording in the same change.
+//! 5. The `test-support` feature of `sul-builds` (shared test fixtures that write into temporary folders) is only ever
+//!    switched on from a `[dev-dependencies]` table, so no shipped package carries it.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -30,15 +32,24 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Every production source file in the app: `crates/sul-core/src`, `crates/sul-net/src` and `src-tauri/src`, as (path under the repo, text).
+/// The crates whose source the scan reads, lowest layer first. A crate that is not listed here is not scanned, so a new
+/// one must be added (the next test names a file from each to prove it is covered).
+const SCANNED_CRATES: &[&str] = &[
+    "sul-core",
+    "sul-launcher",
+    "sul-builds",
+    "sul-mod",
+    "sul-app",
+    "sul-net",
+];
+
+/// Every production source file in the app: `src` of each crate in [`SCANNED_CRATES`] and `src-tauri/src`, as (path under the repo, text).
 fn sources() -> Vec<(String, String)> {
     let root = repo();
     let mut files = Vec::new();
-    rust_files(
-        &root.join("crates").join("sul-core").join("src"),
-        &mut files,
-    );
-    rust_files(&root.join("crates").join("sul-net").join("src"), &mut files);
+    for krate in SCANNED_CRATES {
+        rust_files(&root.join("crates").join(krate).join("src"), &mut files);
+    }
     rust_files(&root.join("src-tauri").join("src"), &mut files);
     files.sort();
     files
@@ -63,7 +74,12 @@ fn production(name: &str, text: &str) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let cut = lines
         .iter()
-        .position(|l| l.starts_with("#[cfg(test)]") || l.starts_with("#[cfg(all(test"))
+        .position(|l| {
+            l.starts_with("#[cfg(test)]")
+                || l.starts_with("#[cfg(all(test")
+                // Shared test fixtures that other crates' tests use (`sul-builds`' `testkit` and `roots::fake`).
+                || l.starts_with("#[cfg(any(test, feature = \"test-support\"))]")
+        })
         .unwrap_or(lines.len());
     for (i, line) in lines.iter().enumerate().skip(cut) {
         let ok = line.is_empty()
@@ -73,6 +89,8 @@ fn production(name: &str, text: &str) -> String {
             || line.starts_with("mod ")
             || line.starts_with("pub(crate) mod ")
             || line.starts_with("pub(crate) use ")
+            || line.starts_with("pub mod ")
+            || line.starts_with("pub use ")
             || line.starts_with("use ")
             || line.starts_with('}')
             || line.starts_with("//")
@@ -141,9 +159,9 @@ fn kinds_in(code: &str) -> BTreeSet<&'static str> {
 /// Where SUL's own code may change files, and what it does there. Updated by hand, on purpose.
 const WRITE_SITES: &[(&str, &[&str], &str)] = &[
     (
-        "crates/sul-core/src/discord.rs",
-        &["open a file or pipe with options"],
-        "opens Discord's local named pipe (\\\\.\\pipe\\discord-ipc-N) to send rich presence to the Discord app on this computer; it is not a disk file",
+        "crates/sul-builds/src/roots.rs",
+        &["create or overwrite a file"],
+        "writes the small marker file that names a library root, with create-new so an existing file is never overwritten; the list of roots itself is saved through the atomic write",
     ),
     (
         "crates/sul-core/src/fsops.rs",
@@ -164,28 +182,9 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "appends one line per operation to the journal",
     ),
     (
-        "crates/sul-core/src/library.rs",
-        &[
-            "create a folder",
-            "create or overwrite a file",
-            "move or rename",
-        ],
-        "saves the game library index atomically (temp file then rename)",
-    ),
-    (
         "crates/sul-core/src/logging.rs",
         &["create a folder", "open a file or pipe with options"],
         "appends to the log file; every line passes the redactor first",
-    ),
-    (
-        "crates/sul-core/src/roots.rs",
-        &["create or overwrite a file"],
-        "writes the small marker file that names a library root, with create-new so an existing file is never overwritten; the list of roots itself is saved through the atomic write",
-    ),
-    (
-        "crates/sul-core/src/service.rs",
-        &["move or rename"],
-        "sets an unreadable library file aside under a new name instead of deleting it",
     ),
     (
         "crates/sul-core/src/templates.rs",
@@ -206,6 +205,25 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "crates/sul-core/src/updater.rs",
         &["create a folder", "create or overwrite a file"],
         "saves which updater version was last seen",
+    ),
+    (
+        "crates/sul-launcher/src/discord.rs",
+        &["open a file or pipe with options"],
+        "opens Discord's local named pipe (\\\\.\\pipe\\discord-ipc-N) to send rich presence to the Discord app on this computer; it is not a disk file",
+    ),
+    (
+        "crates/sul-launcher/src/library.rs",
+        &[
+            "create a folder",
+            "create or overwrite a file",
+            "move or rename",
+        ],
+        "saves the game library index atomically (temp file then rename)",
+    ),
+    (
+        "crates/sul-launcher/src/service.rs",
+        &["move or rename"],
+        "sets an unreadable library file aside under a new name instead of deleting it",
     ),
     (
         "src-tauri/src/ipc_tests.rs",
@@ -232,6 +250,11 @@ fn the_scan_covers_the_source_it_is_meant_to() {
         "crates/sul-core/src/trust/quarantine.rs",
         "src-tauri/src/lib.rs",
         "crates/sul-core/src/logging.rs",
+        // One file from each of the other crates the old `sul-core` was split into.
+        "crates/sul-launcher/src/steam.rs",
+        "crates/sul-builds/src/process.rs",
+        "crates/sul-mod/src/mods/deploy.rs",
+        "crates/sul-app/src/manager.rs",
     ] {
         assert!(all.iter().any(|(n, _)| n == must), "{must} was not scanned");
     }
@@ -346,8 +369,8 @@ fn only_the_steam_launcher_and_the_process_module_start_another_program() {
         let spawns = code.contains("Command::new")
             || code.contains(".spawn(")
             || code.contains("ShellExecute");
-        let may =
-            name == "crates/sul-core/src/steam.rs" || name == "crates/sul-core/src/process.rs";
+        let may = name == "crates/sul-launcher/src/steam.rs"
+            || name == "crates/sul-builds/src/process.rs";
         assert_eq!(spawns, may, "{name}");
     }
 }
@@ -580,6 +603,10 @@ fn no_credential_store_or_network_client_is_declared_yet() {
     for manifest in [
         "Cargo.toml",
         "crates/sul-core/Cargo.toml",
+        "crates/sul-launcher/Cargo.toml",
+        "crates/sul-builds/Cargo.toml",
+        "crates/sul-mod/Cargo.toml",
+        "crates/sul-app/Cargo.toml",
         "crates/sul-net/Cargo.toml",
         "src-tauri/Cargo.toml",
     ] {
@@ -684,7 +711,14 @@ fn sul_net_is_an_empty_boundary_until_the_network_is_decided() {
         workspace.contains("\"crates/sul-net\""),
         "sul-net is not a workspace member"
     );
-    for manifest in ["crates/sul-core/Cargo.toml", "src-tauri/Cargo.toml"] {
+    for manifest in [
+        "crates/sul-core/Cargo.toml",
+        "crates/sul-launcher/Cargo.toml",
+        "crates/sul-builds/Cargo.toml",
+        "crates/sul-mod/Cargo.toml",
+        "crates/sul-app/Cargo.toml",
+        "src-tauri/Cargo.toml",
+    ] {
         let text = fs::read_to_string(root.join(manifest)).unwrap();
         assert!(
             !text.contains("sul-net"),
@@ -697,4 +731,45 @@ fn sul_net_is_an_empty_boundary_until_the_network_is_decided() {
             "{name} uses sul_net before a network feature was approved"
         );
     }
+}
+
+#[test]
+fn the_test_support_feature_is_only_ever_a_dev_dependency() {
+    // `sul-builds` has a `test-support` feature that compiles its test fixtures for the tests of crates above it. Those
+    // fixtures create files and folders. A package that turned the feature on outside `[dev-dependencies]` would ship
+    // them, and the scan above skips them as test code, so this is what keeps that from happening unseen.
+    let root = repo();
+    let mut manifests = vec!["Cargo.toml".to_owned(), "src-tauri/Cargo.toml".to_owned()];
+    for krate in SCANNED_CRATES {
+        manifests.push(format!("crates/{krate}/Cargo.toml"));
+    }
+    let mut seen_definition = false;
+    for manifest in &manifests {
+        let text = fs::read_to_string(root.join(manifest)).unwrap();
+        let mut table = String::new();
+        for line in text.lines().map(str::trim) {
+            if line.starts_with('[') {
+                table = line.to_owned();
+                continue;
+            }
+            if line.starts_with('#') || !line.contains("test-support") {
+                continue;
+            }
+            let is_the_definition = manifest == "crates/sul-builds/Cargo.toml"
+                && table == "[features]"
+                && line.starts_with("test-support");
+            if is_the_definition {
+                seen_definition = true;
+                continue;
+            }
+            assert!(
+                table.starts_with("[dev-dependencies"),
+                "{manifest}: `test-support` is switched on in {table}; only [dev-dependencies] may do that"
+            );
+        }
+    }
+    assert!(
+        seen_definition,
+        "the feature is no longer defined in sul-builds; remove this test with it"
+    );
 }

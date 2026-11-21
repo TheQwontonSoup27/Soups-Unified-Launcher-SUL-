@@ -3,7 +3,7 @@ import { messageOf } from "./library";
 import { slugId, type RootView } from "./manager";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::manager` (the `modding` part) and `sul_core::mods` (serde, snake_case).
+// Wire types. They mirror `sul_app::manager` (the `modding` part) and `sul_mod::mods` (serde, snake_case).
 // `src-tauri/src/ipc_tests.rs` pins the field names from the Rust side.
 // ---------------------------------------------------------------------------
 

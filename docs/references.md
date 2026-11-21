@@ -8,7 +8,7 @@ read for each investigation, the libraries the decision records checked, and the
 model, not the page itself). *Front page only* means that and no more. *Listed, not read* means a search or a document named it and nobody opened it.
 *Not investigated* is the capability-matrix word: nothing was downloaded, built or run, so nothing here says the project works, is safe, or fits SUL.
 
-**Two rules that apply to everything below.** SUL's own licence is undecided (`PROJECT_SPEC.md` section 7), so **no code is copied from any project listed
+**Two rules that apply to everything below.** SUL's own licence is undecided (old `PROJECT_SPEC.md` section 7, now only on the archive branch `archive/legacy-pre-ground-up-2026-11-09`; still undecided, see `docs/SESSION_STATE.md`), so **no code is copied from any project listed
 here**, and a GPL project would limit that choice. And nothing learned from a project below lets SUL bypass anti-cheat, access controls or a provider's
 restrictions (`CLAUDE.md`).
 
@@ -112,7 +112,7 @@ Every one of these is **Not investigated** unless a section above says otherwise
 
 | File | What it is | Where |
 |---|---|---|
-| `PROJECT_SPEC.md` | The product spec, v1.0 (2026-10-22: "a planning baseline, not proof") | repository root |
+| `PROJECT_SPEC.md` | The old product spec, v1.0 (2026-10-22: "a planning baseline, not proof"). Replaced by `SUL-ARCHITECTURE.md` and `SUL-BRIEF.md` | only on the archive branch `archive/legacy-pre-ground-up-2026-11-09` (removed from the working tree on 2026-11-18) |
 | `CLAUDE.md` | Operating instructions for work on the repository | repository root |
 | Four design mockups | Conceptual references for hierarchy and status wording; not final assets | `docs/design-references/01-launcher-overview.png`, `02-build-manager.png`, `03-mod-builder.png`, `04-capture-medal.png`. The spec and `CLAUDE.md` call the folder `design-references/` at the root; the files are under `docs/` |
 | Spec "V5.1" | A longer spec with architecture directions, sent 2026-10-31 in the conversation; **not stored in the repository** | its dependency lines and directions are checked in decision 0006 |
@@ -120,7 +120,7 @@ Every one of these is **Not investigated** unless a section above says otherwise
 
 ## 7. This project's own addresses
 
-- https://github.com/TheQwontonSoup27/Soups-Unified-Launcher-SUL- (the repository; in `Cargo.toml` and `PROJECT_SPEC.md`)
+- https://github.com/TheQwontonSoup27/Soups-Unified-Launcher-SUL- (the repository; in `Cargo.toml`)
 - Setup pages the docs send a person to: https://rustup.rs (`docs/SETUP-WINDOWS.md`) and https://discord.com/developers/applications (`docs/discord.md`)
 
 ## 8. Addresses in the repository that are not references

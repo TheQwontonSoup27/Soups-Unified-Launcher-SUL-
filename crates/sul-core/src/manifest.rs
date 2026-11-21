@@ -153,7 +153,7 @@ pub(crate) fn walk(root: &Path) -> Result<BTreeMap<String, std::path::PathBuf>> 
 }
 
 /// The sorted inventory (path, SHA-256, size) of every plain file under `root`. A symlink anywhere is an error.
-pub(crate) fn inventory(root: &Path) -> Result<Vec<FileEntry>> {
+pub fn inventory(root: &Path) -> Result<Vec<FileEntry>> {
     let mut files = Vec::new();
     for (rel, p) in walk(root)? {
         let (sha256, size) = hash_file(&p)?;
@@ -312,7 +312,8 @@ impl BuildManifest {
     }
 }
 
-pub(crate) fn now_unix() -> u64 {
+/// Seconds since the Unix epoch, or 0 if the clock is before it.
+pub fn now_unix() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())

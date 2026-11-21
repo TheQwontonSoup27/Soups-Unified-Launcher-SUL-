@@ -5,7 +5,7 @@ import { formatSize } from "./mods";
 import type { Status } from "../types";
 
 // ---------------------------------------------------------------------------
-// Wire types. They mirror `sul_core::builder::tools` and `sul_core::manager::tooling` (serde, snake_case; the status
+// Wire types. They mirror `sul_mod::builder::tools` and `sul_app::manager::tooling` (serde, snake_case; the status
 // words are tagged with `state`). `src-tauri/src/ipc_tests.rs` pins the field names from the Rust side.
 // ---------------------------------------------------------------------------
 

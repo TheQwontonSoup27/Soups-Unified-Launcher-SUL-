@@ -1,7 +1,7 @@
 // A backend for the Mods page that lives in memory. It is NOT the core: it keeps the shape of the real answers and
 // refuses the few things a test needs refused, with plain-text errors like a failing command. What the core really
 // refuses (a forbidden folder, a file changed since it was deployed, a game with no adapter) is tested in
-// `crates/sul-core/src/manager/modding.rs` and `src-tauri/src/ipc_tests.rs`.
+// `crates/sul-app/src/manager/modding.rs` and `src-tauri/src/ipc_tests.rs`.
 import type {
   BuildModsView,
   DeployPlan,

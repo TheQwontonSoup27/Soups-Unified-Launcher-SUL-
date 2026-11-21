@@ -3398,6 +3398,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "sul-app"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "sha2",
+ "sul-builds",
+ "sul-core",
+ "sul-launcher",
+ "sul-mod",
+ "tempfile",
+]
+
+[[package]]
+name = "sul-builds"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sul-core",
+ "sul-launcher",
+ "tempfile",
+]
+
+[[package]]
 name = "sul-core"
 version = "0.1.0"
 dependencies = [
@@ -3405,12 +3430,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "steamworks",
  "tempfile",
  "thiserror 2.0.21",
- "tracing",
- "tracing-subscriber",
- "winreg",
 ]
 
 [[package]]
@@ -3423,12 +3444,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "sul-launcher"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "steamworks",
+ "sul-core",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+ "winreg",
+]
+
+[[package]]
 name = "sul-metrics"
 version = "0.1.0"
 dependencies = [
  "bumpalo",
  "rustc-hash",
  "sul-ipc-types",
+]
+
+[[package]]
+name = "sul-mod"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sul-builds",
+ "sul-core",
+ "sul-launcher",
+ "tempfile",
 ]
 
 [[package]]
@@ -3450,7 +3499,11 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sul-app",
+ "sul-builds",
  "sul-core",
+ "sul-launcher",
+ "sul-mod",
  "tauri",
  "tauri-build",
  "tempfile",
