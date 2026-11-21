@@ -1,6 +1,6 @@
 # SESSION STATE: check this first on every run
 
-Last updated: 2026-11-21, end of the `sul-core` split (all four cuts in one commit). Branch: `rebuild/r0-bootstrap` (nothing is on `main`).
+Last updated: 2026-11-21, end of the `sul-core` split (all four cuts in one commit, `e9936da`, Windows CI green). Branch: `rebuild/r0-bootstrap` (nothing is on `main`).
 
 In plain words: this is the hand-over log named in `CLAUDE.md`. The owner's standing preference is that a log they assign is read at the start of every run and updated at the end of each milestone. Read order: this file, then `CLAUDE.md`, then `HANDOFF.md` (working notes about the owner and the environment; where it disagrees with the new spec, the new spec wins), then only the scoped parts of the spec that the task needs.
 
@@ -62,7 +62,7 @@ Re-run 2026-11-21 in a fresh session on the working tree, immediately before the
 | *Rows below are earlier commits, kept as history* | |
 | GitHub Windows CI, commit `fdbd37c` (run 44696191567) | **`r0-substrate` failed**; `core`, `ui`, `tauri-shell` passed. Cause: `xtask/src/network.rs` did not compile on the runner's newer stable Rust ("trailing semicolon in macro used in expression position", `miette::bail!` as the last expression of a function and of a test closure). The container's rustc 1.97 does not report it (gap 7). |
 | GitHub Windows CI, commit `abedb93` (run 44697710404, the fix) | **all four jobs success**: `r0-substrate` (fmt, clippy, tests, and the xtask gates including the network guard on Windows), `core`, `ui`, `tauri-shell`. First run of the guard on Windows. |
-| GitHub Windows CI, the split commit | **pending**: not yet read. Do not call the split done until all four jobs are green (see Next). |
+| GitHub Windows CI, the split commit `e9936da` (run 44929229960) | **all four jobs success**: `r0-substrate`, `core` (all five split crates lint and test on Windows), `ui`, `tauri-shell` (including the app binary carrying its manifest). The split is done. |
 
 ## Known gaps (do not claim past these)
 
@@ -78,9 +78,8 @@ Re-run 2026-11-21 in a fresh session on the working tree, immediately before the
 
 ## Next
 
-1. **Read the Windows CI result for the split commit** (gap 7) and record it in the Verification table. If a job failed, the cause is in the job annotations (`.github/scripts/surface-failure.ps1`). The split is not done until all four jobs are green.
-2. **Ask the owner where `manifest` and `trust/*` go** (they are in `sul-core` today; decision 0009, step 6). Read Ch. 14 §2.13 and Ch. 3 §2.13 first. Likely `sul-trust` / `sul-quarantine` (encrypted, 0009 point 4.4) and builds. The old-spec comments in those modules and in `templates`, `storage`, `updater` and `portability` are rewritten when they move.
-3. Ask the owner (a) whether to change the user-visible sentence in `tools.rs` and the window's "Module N" labels (gap 8), and (b) to add the Discord webhook and the Steam Web API to the declared network list (gap 5) before any code calls them.
-4. R0 layers 1 and 2: harden `sul-ipc-types` and `sul-wire` (gap 3), make the xtask gates real (gap 2).
+1. **Ask the owner where `manifest` and `trust/*` go** (they are in `sul-core` today; decision 0009, step 6). Ch. 14 §2.13 and Ch. 3 §2.13 were read on 2026-11-21: Ch. 3 §2.13 puts mod package scanning in front of staging, with suspicious packages sent to `sul-quarantine` (copy, verify, record, verify, remove into an *encrypted* quarantine) and detections logged to the threat log (Ch. 14 §14.13); Ch. 14 §14.13.1 is the two-tier rule (SUL's own files: Ed25519 + `blake3`; external protected files: read-only SHA-256 baselines). Proposed split, not yet asked: `trust/integrity` and `trust/policy` to `sul-trust`; `trust/quarantine` to a new `sul-quarantine` (encrypted, 0009 point 4.4); `trust/package` and the package scan to `sul-mod`; `manifest` to `sul-builds`; `trust/webhook` waits for the network-list answer in 2(b). The old-spec comments in those modules and in `templates`, `storage`, `updater` and `portability` are rewritten when they move.
+2. Ask the owner (a) whether to change the user-visible sentence in `tools.rs` and the window's "Module N" labels (gap 8), and (b) to add the Discord webhook and the Steam Web API to the declared network list (gap 5) before any code calls them.
+3. R0 layers 1 and 2: harden `sul-ipc-types` and `sul-wire` (gap 3), make the xtask gates real (gap 2).
 
-Next command: `gh run list --branch rebuild/r0-bootstrap` (read the split commit's Windows run), then `cargo check --workspace --locked` to confirm the baseline is still green.
+Next command: `cargo check --workspace --locked` to confirm the baseline is still green, then act on the owner's answers to items 1 and 2.
