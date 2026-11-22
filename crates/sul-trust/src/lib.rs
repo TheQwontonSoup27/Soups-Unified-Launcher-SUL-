@@ -1,5 +1,7 @@
 //! Cryptographic manifest verification (`blake3` + `ed25519-dalek`) and structural refusal gates.
 
+#![forbid(unsafe_code)]
+
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

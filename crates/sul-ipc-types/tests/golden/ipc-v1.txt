@@ -1,0 +1,63 @@
+# SUL IPC golden bytes, schema v1. Regenerate with:
+#   SUL_UPDATE_GOLDEN=1 cargo test -p sul-ipc-types --test golden
+# Lines are `name length hex`. Review every diff: a change here is a wire-format change.
+
+[ring]
+MAX_MESSAGE_BYTES = 65536
+SLOT_ALIGN = 64
+SLOT_HEADER_BYTES = 64
+SLOT_STATE_OFFSET = 0
+SLOT_SEQ_OFFSET = 8
+SLOT_TIMESTAMP_OFFSET = 16
+SLOT_LEN_OFFSET = 24
+SLOT_MIN_BYTES = 128
+SLOT_MAX_BYTES = 65600
+RING_MAX_BYTES = 268435456
+RING_MAX_SLOTS = 1048576
+MAGIC = 0x53554c57
+VERSION = 1
+
+[messages]
+Ping 40 00000000000000000100000000000000020000000000000000000000000000000000000000000000
+Pong 40 0100000000000000ffffffffffffffff000000000000000000000000000000000000000000000000
+TokenChunk 48 68c3a96c6c6f0000020000000000000009000000000000000300000001000000e0ffffff060000000000000000000000
+TokenChunk.empty 40 020000000000000000000000000000000000000000000000e8ffffff000000000000000000000000
+Telemetry 40 03000000000000006169ffffffffffff74746674ffffffff78000000000000000500000000000000
+Tier1Event 56 617574683a64697361626c6500000000040000008c000000ecffffff00000000000000000000000000000000000000000000000000000000
+Error 64 455f574952455f4652414d455f434f5252555054000000000500000094000000e4ffffff0200000064726f70706564ff00000000000000000000000000000000
+
+[enums]
+FailureMode::ModeA 00
+FailureMode::ModeB 01
+FailureMode::ModeC 02
+FailureMode::ModeD 03
+FailureMode::ModeE 04
+FailureMode::ModeF 05
+ReleaseClass::R0 00
+ReleaseClass::R1 01
+ReleaseClass::R2 02
+ReleaseClass::R3 03
+ReleaseClass::R4 04
+
+[tier1-core-events]
+vault:disable_auth_factor
+vault:disable_anti_debug
+vault:disable_decoy
+vault:change_kdf_profile
+vault:change_aead_cipher
+vault:enable_searchable_index
+vault:add_extra_path_via_config
+auth:disable
+auth:disable_factor
+auth:change_reauth_for_vault
+auth:disable_anti_debug
+auth:disable_process_hardening
+auth:disable_memory_lock
+invariant:disable_destructive_action_always_thinking
+invariant:enable_uncensored_model
+webview:disable_isolation_pattern
+webview:disable_strict_esm
+webview:lower_runtime_floor
+webview:lower_tauri_version_floor
+webview:grant_shell_allow_execute
+refusal:voice_clone_attempt

@@ -1,5 +1,7 @@
 //! High-throughput telemetry rollup using `FxHashMap` (`rustc-hash`) and `bumpalo` scratch arenas (D-148).
 
+#![forbid(unsafe_code)]
+
 use rustc_hash::FxHashMap;
 use sul_ipc_types::TelemetryMsg;
 
