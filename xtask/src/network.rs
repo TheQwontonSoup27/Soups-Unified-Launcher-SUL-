@@ -30,11 +30,11 @@ pub struct DeclaredPackage {
 
 /// Packages allowed to compile network crates. Add a row only when the spec declares the surface (Ch. 16 §16.15.14) and
 /// the package exists. The other declared surfaces (hive-mind fetch, auto-updater, Sentry, GEV feeds, the Phase 3 list)
-/// have no package yet. The Steam Web API and a Discord webhook are *not* on the spec's list: they need the owner to add
-/// them to it before any code calls them (docs/decisions/0009).
+/// have no package yet. The Steam Web API and a Discord webhook were added to the spec's list by the owner on 2026-11-21
+/// (D-149) and also live behind `sul-net`.
 pub const DECLARED_NETWORK_PACKAGES: &[DeclaredPackage] = &[DeclaredPackage {
     package: "sul-net",
-    surfaces: "RustXNG MCP (localhost) and the GitHub search API (Ch. 1 §2.6, Ch. 16 §16.4.17)",
+    surfaces: "RustXNG MCP (localhost), the GitHub search API, the Steam Web API and a Discord webhook (Ch. 1 §2.6, Ch. 16 §16.15.14, D-149)",
 }];
 
 /// Crates whose job is HTTP, sockets, DNS, TLS or WebSockets. A match is a build that can reach a network.

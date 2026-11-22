@@ -5,6 +5,10 @@
 //! (webhooks, online text for the overlay, the updater), its client code goes here and the app reaches it through a small,
 //! explicit interface, off by default and switched on by the owner.
 //!
+//! Surfaces declared for this crate (Ch. 16 §16.15.14, D-149): the RustXNG MCP server (localhost), the GitHub search API, the
+//! Steam Web API (public player data, read-only) and a Discord webhook (the clipping engine's social toggle only). Nothing
+//! calls any of them yet.
+//!
 //! Tripwires that keep this true: `crates/sul-core/tests/write_sites.rs` (this crate stays empty and unreferenced, and no other
 //! manifest may declare a network or credential crate), and the declared-surface guard in `cargo xtask ac-regression`
 //! (`xtask/src/network.rs`, Ch. 16 §16.15.14: network crates may enter a package's Windows graph only through `sul-net`).

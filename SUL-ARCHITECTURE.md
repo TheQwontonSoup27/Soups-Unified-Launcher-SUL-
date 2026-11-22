@@ -19,8 +19,8 @@
 | Ch. 13 — Hardware-Tailored Integration and Advanced Optimization | 9397 | 9829 |
 | Ch. 14 — Autonomous Hive-Mind and Safety Protocol | 9830 | 10683 |
 | Ch. 15 — Sensing, Security, and Handoff Features | 10684 | 12098 |
-| Ch. 16 — Threat Model, Licensing, Anti-Cheat | 12099 | 12800 |
-| Ch. 17 — References | 12801 | 14367 |
+| Ch. 16 — Threat Model, Licensing, Anti-Cheat | 12099 | 12805 |
+| Ch. 17 — References | 12806 | 14372 |
 
 
 SUL-ARCHITECTURE/Ch. 01 — Core Platform.md
@@ -12782,6 +12782,11 @@ Phase 3 additions (declared, user-configured, local-first):
 - TinEye API (tineye.com) — only when `find_image_source` is invoked.
 - Ninite (ninite.com) — only when `install_software` is invoked.
 - Maxun (user-configured local or container) — only when `scrape_page` is invoked.
+
+Owner additions (D-149, 2026-11-21; declared before any code calls them):
+
+- Steam Web API (api.steampowered.com) — public player data keyed by the user's SteamID64 (playtime, achievements, owned games); read-only. SUL stores no Steam password or token; any API key is user-supplied and kept out of source control and logs.
+- Discord webhook (discord.com) — the clipping engine's social/Discord toggle only; outbound posts only. The webhook URL is a secret and is masked in logs.
 
 Nothing else. The agent, the search pipeline, the vault, the STT pipeline, the audio pipeline, the music player, the broadcast engine, the emulator pipeline, CSI, BCI, and VoiceStudio do not have their own HTTP clients.
 

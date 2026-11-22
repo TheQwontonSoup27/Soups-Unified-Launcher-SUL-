@@ -291,6 +291,16 @@ LocalSend (LAN only).
 
 
 
+Owner additions (D-149, 2026-11-21; declared before any code calls them):
+
+
+
+Steam Web API (api.steampowered.com) — public player data keyed by the user's SteamID64, read-only; any API key is user-supplied and kept out of source control and logs.
+
+Discord webhook (discord.com) — the clipping engine's social/Discord toggle only; outbound posts only; the webhook URL is a secret and is masked in logs.
+
+
+
 Nothing else. The agent, the search pipeline, the vault, the STT pipeline, the audio pipeline, the music player, the broadcast engine, the emulator pipeline, CSI, BCI, and VoiceStudio do not have their own HTTP clients.
 
 
