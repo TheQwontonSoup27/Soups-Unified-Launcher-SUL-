@@ -13,8 +13,8 @@
 //!
 //! Backpressure (Ch. 7 §2.3): [`push_ipc`] goes through `LocalSpscRing::try_push` and nothing else. A full ring comes back
 //! as `WireError::Ring(RingError::WouldBlock)` with the queued messages untouched; the caller decides whether to retry or
-//! drop the message and count the loss. This crate holds no unsafe code (`forbid(unsafe_code)`), and `cargo xtask
-//! ac-regression` fails if that attribute is removed without an entry in its allowlist.
+//! drop the message and count the loss. This crate holds no unsafe code: `#![forbid(unsafe_code)]` makes the compiler refuse
+//! any `unsafe` block in it. No xtask gate checks that the attribute itself is still there.
 //!
 //! Not done yet (R0 layer 3): the shared-memory ring across processes, the Tauri binary framing and the ring view for the
 //! window. Miri is not available in the container, so nothing here has been run under it (docs/SESSION_STATE.md).

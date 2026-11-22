@@ -5178,6 +5178,7 @@ dependencies = [
  "miette",
  "serde",
  "serde_json",
+ "sul-ipc-types",
  "thiserror 2.0.21",
  "toml 0.8.23",
 ]

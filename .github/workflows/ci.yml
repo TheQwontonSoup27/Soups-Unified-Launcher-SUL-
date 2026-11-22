@@ -5,7 +5,7 @@ on: [push, pull_request]
 # docs/SETUP-WINDOWS.md, so a green run here means those steps work on a clean machine.
 jobs:
   # The new design's R0 substrate (CLAUDE.md "R0 Build Order") and the xtask gate runner. Same failure-annotation
-  # pattern as `core`. The xtask gates are still thin (see docs/SESSION_STATE.md); this job proves they run on Windows.
+  # pattern as `core`. Each xtask gate prints what it does not check (see docs/SESSION_STATE.md, known gap 2); this job proves they run on Windows.
   # `cargo xtask ac-regression` includes the network-surface guard (xtask/src/network.rs): it asks cargo for the Windows
   # graph of every shipped package and fails on a network crate outside a declared package, on tokio's `net` feature, on a
   # Windows networking API feature, or on a networking API named in source. It does not look inside WebView2, std or Steam.
@@ -39,6 +39,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) { cargo xtask electron-audit 2>&1 | Tee-Object -FilePath gates.log -Append }
           if ($LASTEXITCODE -eq 0) { cargo xtask ac-regression 2>&1 | Tee-Object -FilePath gates.log -Append }
           if ($LASTEXITCODE -eq 0) { cargo xtask release-check --release R0 2>&1 | Tee-Object -FilePath gates.log -Append }
+          if ($LASTEXITCODE -eq 0) { cargo xtask ipc-check 2>&1 | Tee-Object -FilePath gates.log -Append }
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 gates.log; exit $code }
 

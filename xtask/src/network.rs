@@ -269,7 +269,7 @@ pub fn source_files(root: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn run_cargo(args: &[String]) -> Result<String> {
+pub fn run_cargo(args: &[String]) -> Result<String> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let out = Command::new(cargo)
         .args(args)
@@ -286,7 +286,7 @@ fn run_cargo(args: &[String]) -> Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-fn cargo_tree(package: &str, extra: &[String]) -> Result<String> {
+pub fn cargo_tree(package: &str, extra: &[String]) -> Result<String> {
     let mut args: Vec<String> = ["tree", "-p", package, "--target", TARGET]
         .map(str::to_owned)
         .into();

@@ -1,11 +1,24 @@
 //! SUL build, gate, AST-guard, and benchmark runner (`cargo xtask <cmd>`).
 //! Implements the R0 verification surface defined in Ch. 1 §10, §13.5.7, and SUL-LEDGER/*.md.
+//!
+//! Every gate is a module with a pure function over text (unit-tested with made-up input) and a `check()` that prints one
+//! `[xtask] <gate>: ...` verdict and `PROBLEM <gate>: ...` lines. A gate that is only partly implemented says what it does
+//! not check in its own output: a green gate never claims more than it looked at. `run_all` runs every gate of a command
+//! even when an earlier one fails, so one run reports everything that is wrong.
 
+mod boundaries;
+mod common;
+mod electron;
+mod ipc;
 mod network;
+mod release;
+mod tauri;
+mod workspace;
 
 use clap::{Parser, Subcommand};
-use miette::{Context, IntoDiagnostic, Result, bail};
-use std::path::PathBuf;
+use common::run_all;
+use miette::{Context, IntoDiagnostic, Result};
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(name = "xtask", about = "SUL spec, gate, guard, and benchmark runner")]
@@ -16,16 +29,22 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Validate config.toml and workspace Cargo.toml (Edition 2024, MSRV 1.85) against Ch. 1 §4
+    /// Validate the workspace Cargo.toml (Edition 2024, MSRV 1.85) and config.toml syntax (Ch. 1 §4; the compatibility rules are sul-compat)
     ConfigCheck {
         #[arg(long, default_value = "config.toml")]
         config: PathBuf,
     },
-    /// Enforce AST structural guards, layer boundaries, feature orthogonality, and Windows/AC refusals
+    /// Structural guards from SUL-LEDGER/guards.md: workspace manifest, network surfaces, crate boundaries, Electron, Tauri capabilities, WebView runtime
     AcRegression,
-    /// Verify zero Electron / Node.js components in sul.exe dependency graph
+    /// Verify zero Electron / Node.js in manifests, lockfiles, the Tauri bundle and source (guards.md, "Electron exclusion")
     ElectronAudit,
-    /// Verify release gate, asset/schema parity, & component parity against SUL-LEDGER/releases.md
+    /// Audit tauri.conf.json and capability files: csp, withGlobalTauri, wildcard scopes, shell execute (guards.md)
+    TauriCapabilityAudit,
+    /// Check the locked Tauri and plugin-updater versions against the ledger's floors (guards.md)
+    WebviewRuntimeAudit,
+    /// Run the golden-bytes test of sul-ipc-types: the wire format must not change without a reviewed golden-file update (Ch. 7 §2.3)
+    IpcCheck,
+    /// Check the release ladder and the Tier 1-core events in SUL-LEDGER/releases.md against gates.md, the workspace version and sul-ipc-types
     ReleaseCheck {
         #[arg(long, default_value = "R0")]
         release: String,
@@ -42,101 +61,76 @@ enum Command {
         #[arg(long, default_value_t = 0)]
         wave: u8,
     },
-    /// Execute full CI DAG for a target release class
+    /// Run every gate for a target release class
     Pipeline {
         #[arg(long, default_value = "R0")]
         release: String,
     },
 }
 
-fn validate_workspace_manifest() -> Result<()> {
-    let manifest_path = PathBuf::from("Cargo.toml");
-    if manifest_path.exists() {
-        let raw = std::fs::read_to_string(&manifest_path)
-            .into_diagnostic()
-            .context("failed to read workspace Cargo.toml")?;
-        let doc: toml::Value = toml::from_str(&raw)
-            .into_diagnostic()
-            .context("invalid TOML in workspace Cargo.toml")?;
-        if let Some(pkg) = doc.get("workspace").and_then(|w| w.get("package")) {
-            let edition = pkg.get("edition").and_then(|v| v.as_str()).unwrap_or("");
-            let msrv = pkg
-                .get("rust-version")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if edition != "2024" {
-                bail!("workspace.package.edition must be 2024 (found {edition:?})");
-            }
-            if msrv != "1.85" {
-                bail!("workspace.package.rust-version must be 1.85 (found {msrv:?})");
-            }
-        }
-        if raw.contains("io-uring") {
-            bail!(
-                "Linux-only compio `io-uring` feature must not appear in Windows workspace Cargo.toml"
-            );
-        }
+/// The shipped `config.toml`, if there is one. The repository has none yet, and the output says so.
+fn config_toml(config: &Path) -> Result<()> {
+    if !config.exists() {
+        println!(
+            "[xtask] config-toml: {} not found, so no shipped-config rule was checked (the Ch. 1 §4 compatibility rules are the sul-compat crate, R0 layer 3)",
+            config.display()
+        );
+        return Ok(());
     }
+    let raw = std::fs::read_to_string(config)
+        .into_diagnostic()
+        .with_context(|| format!("failed to read {}", config.display()))?;
+    toml::from_str::<toml::Value>(&raw)
+        .into_diagnostic()
+        .with_context(|| format!("invalid TOML syntax in {}", config.display()))?;
+    println!(
+        "[xtask] config-toml: {} is valid TOML. NOT checked: the Ch. 1 §4 compatibility rules (sul-compat, R0 layer 3)",
+        config.display()
+    );
     Ok(())
 }
 
-fn check_electron_free() -> Result<()> {
-    let manifest_path = PathBuf::from("Cargo.toml");
-    if manifest_path.exists() {
-        let raw = std::fs::read_to_string(&manifest_path).into_diagnostic()?;
-        if raw.to_ascii_lowercase().contains("electron") {
-            bail!("electron dependency detected in Cargo.toml (violates Zero Electron invariant)");
-        }
-    }
-    Ok(())
+fn say_what_ac_regression_covers() {
+    println!(
+        "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14), crate boundaries (HTTP client, direct wasapi and process-memory rules are written; the crate-boundaries line below says which are armed), Electron exclusion, Tauri capability audit, WebView runtime audit (Tauri and updater floors)"
+    );
+    println!(
+        "[xtask] ac-regression: NOT implemented yet: structural refusals (voice-clone, kernel-AC frame-gen and hook refusals: the crates and the shipped config.toml they guard do not exist), guards on a module or call order inside a crate (need syntax analysis), feature orthogonality and the [webview] config guards (need config.toml), the WebView2 runtime floor. No rule for \"Windows-only IPC\" was found in Ch. 1."
+    );
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.cmd {
         Command::ConfigCheck { config } => {
-            println!(
-                "[xtask] config-check: validating workspace & {}",
-                config.display()
-            );
-            validate_workspace_manifest()?;
-            if config.exists() {
-                let raw = std::fs::read_to_string(&config)
-                    .into_diagnostic()
-                    .with_context(|| format!("failed to read {}", config.display()))?;
-                let _: toml::Value = toml::from_str(&raw)
-                    .into_diagnostic()
-                    .context("invalid TOML syntax in config")?;
-            }
-            println!("[xtask] config-check: OK");
+            run_all(&[
+                ("workspace-manifest", &workspace::check),
+                ("config-toml", &|| config_toml(&config)),
+            ])?;
+            println!("[xtask] config-check: OK (for the checks listed above only)");
         }
         Command::AcRegression => {
-            println!(
-                "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14)"
-            );
-            println!(
-                "[xtask] ac-regression: NOT implemented yet: structural refusals, crate boundaries, feature orthogonality, Windows-only IPC"
-            );
-            validate_workspace_manifest()?;
-            network::check()?;
+            say_what_ac_regression_covers();
+            run_all(&[
+                ("workspace-manifest", &workspace::check),
+                ("network-surfaces", &network::check),
+                ("crate-boundaries", &boundaries::check),
+                ("electron-audit", &electron::check),
+                ("tauri-capability-audit", &tauri::check_capabilities),
+                ("webview-runtime-audit", &tauri::check_runtime),
+            ])?;
             println!("[xtask] ac-regression: OK (for the guards listed above only)");
         }
-        Command::ElectronAudit => {
-            println!(
-                "[xtask] electron-audit: checking Cargo.toml / package manifests for Electron"
-            );
-            check_electron_free()?;
-            println!("[xtask] electron-audit: OK");
-        }
+        Command::ElectronAudit => electron::check()?,
+        Command::TauriCapabilityAudit => tauri::check_capabilities()?,
+        Command::WebviewRuntimeAudit => tauri::check_runtime()?,
+        Command::IpcCheck => ipc::check()?,
         Command::ReleaseCheck { release } => {
-            println!(
-                "[xtask] release-check: implemented checks for {release}: workspace manifest (edition, MSRV), no Electron in Cargo.toml"
-            );
-            println!(
-                "[xtask] release-check: NOT implemented yet: reading SUL-LEDGER/releases.md, asset/schema parity, component parity"
-            );
-            validate_workspace_manifest()?;
-            check_electron_free()?;
+            run_all(&[
+                ("workspace-manifest", &workspace::check),
+                ("electron-audit", &electron::check),
+                ("release-ladder", &|| release::check(&release)),
+            ])?;
             println!("[xtask] release-check ({release}): OK (for the checks listed above only)");
         }
         Command::BenchTelemetry => {
@@ -152,12 +146,18 @@ fn main() -> Result<()> {
             println!("[xtask] plan: NOT implemented yet (no task DAG was emitted for wave {wave})");
         }
         Command::Pipeline { release } => {
-            println!(
-                "[xtask] pipeline: implemented checks for {release}: workspace manifest, no Electron, network surfaces (same limits as ac-regression and release-check)"
-            );
-            validate_workspace_manifest()?;
-            check_electron_free()?;
-            network::check()?;
+            say_what_ac_regression_covers();
+            run_all(&[
+                ("workspace-manifest", &workspace::check),
+                ("config-toml", &|| config_toml(Path::new("config.toml"))),
+                ("network-surfaces", &network::check),
+                ("crate-boundaries", &boundaries::check),
+                ("electron-audit", &electron::check),
+                ("tauri-capability-audit", &tauri::check_capabilities),
+                ("webview-runtime-audit", &tauri::check_runtime),
+                ("release-ladder", &|| release::check(&release)),
+                ("ipc-check", &ipc::check),
+            ])?;
             println!("[xtask] pipeline ({release}): OK (for the checks listed above only)");
         }
     }
