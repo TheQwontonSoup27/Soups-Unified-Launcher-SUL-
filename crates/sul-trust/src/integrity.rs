@@ -13,12 +13,12 @@
 //! It reads only the report it is given (or, through [`check_build`], reads the build directory and never writes to it).
 //! It is a comparison with a recorded state. It is not cheat detection and not malware detection.
 
-use super::{Finding, ProgramKind, program_kind};
-use crate::Result;
+use crate::findings::{Finding, ProgramKind, program_kind};
 use crate::manifest::{BuildManifest, Variant, VerifyReport};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use sul_core::Result;
 
 /// Whether the recorded build is expected to stay exactly as recorded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -314,7 +314,7 @@ mod tests {
         assert!(
             a.violations
                 .iter()
-                .all(|f| f.certainty == super::super::Certainty::Confirmed)
+                .all(|f| f.certainty == crate::findings::Certainty::Confirmed)
         );
         assert!(a.changes.is_empty() && a.suspicious.is_empty());
     }
@@ -352,7 +352,7 @@ mod tests {
             assert!(
                 a.suspicious
                     .iter()
-                    .all(|f| f.certainty == super::super::Certainty::Suspicious)
+                    .all(|f| f.certainty == crate::findings::Certainty::Suspicious)
             );
             assert!(a.violations.is_empty(), "a signal is never a violation");
             assert!(
@@ -614,7 +614,7 @@ mod tests {
         let root = tmp.path().join("build");
         build(&root, &[("a.bin", b"one")]);
         let m = BuildManifest::scan(&root, "g", "G", Variant::Original, "1", "t").unwrap();
-        super::super::make_junction(&root.join("link"), tmp.path());
+        crate::findings::make_junction(&root.join("link"), tmp.path());
         assert!(check_build(&m, &root, &IntegrityOptions::default()).is_err());
     }
 }

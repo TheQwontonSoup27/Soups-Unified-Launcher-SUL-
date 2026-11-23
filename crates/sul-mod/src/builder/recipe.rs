@@ -53,9 +53,9 @@ use sul_builds::roots::RootKind;
 use sul_core::error::io;
 use sul_core::fsops;
 use sul_core::journal::fresh_id;
-use sul_core::manifest::{VerifyReport, inventory, now_unix};
 use sul_core::safepath;
 use sul_core::{Error, Result};
+use sul_trust::manifest::{VerifyReport, inventory, now_unix};
 
 use super::OpClass;
 use super::patch::{BytePatch, MAX_PATCH_FILE_BYTES, PatchOutcome, read_plain};
@@ -296,7 +296,7 @@ fn output_hash(entries: &BTreeMap<String, Entry>) -> String {
     hex::encode(h.finalize())
 }
 
-fn inventory_hash(files: &[sul_core::manifest::FileEntry]) -> String {
+fn inventory_hash(files: &[sul_trust::manifest::FileEntry]) -> String {
     let mut h = Sha256::new();
     for f in files {
         h.update(f.path.as_bytes());
@@ -747,7 +747,7 @@ mod tests {
         let dir = run_dir(&f.w.ctx(), "mods", &rec.recipe.id, &rec.run_id)
             .unwrap()
             .join(FILES_DIR);
-        sul_core::manifest::inventory(&dir)
+        sul_trust::manifest::inventory(&dir)
             .unwrap()
             .into_iter()
             .map(|e| {

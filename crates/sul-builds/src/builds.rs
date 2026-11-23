@@ -25,12 +25,12 @@ use crate::roots::{DiskSpace, LibraryRoots, RootKind};
 use sul_core::error::io;
 use sul_core::fsops::{self, ProtectedRoots};
 use sul_core::journal::{Journal, fresh_id};
-use sul_core::manifest::{
-    BuildManifest, State, Variant, VerifyReport, hash_file, manifest_path_for, now_unix,
-};
 use sul_core::safepath;
 use sul_core::storage::validate_game_id;
 use sul_core::{Error, Result};
+use sul_trust::manifest::{
+    BuildManifest, State, Variant, VerifyReport, hash_file, manifest_path_for, now_unix,
+};
 
 pub const REGISTRY_SCHEMA: u32 = 1;
 /// Free space to leave on a disk after a copy: 512 MiB. A choice made here, not a measured figure.

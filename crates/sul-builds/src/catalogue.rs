@@ -24,10 +24,10 @@ use crate::adapters::AdapterRegistry;
 use crate::builds::{BuildRegistry, Location};
 use crate::runtime::LaunchState;
 use sul_core::fsops::{self, ProtectedRoots};
-use sul_core::manifest::State;
 use sul_core::storage::validate_game_id;
 use sul_core::{Error, Result, error::io};
 use sul_launcher::capability::Status;
+use sul_trust::manifest::State;
 
 pub const CATALOGUE_SCHEMA: u32 = 1;
 pub const MAX_CATEGORIES_PER_GAME: usize = 20;
@@ -346,7 +346,7 @@ mod tests {
     use super::*;
     use crate::adapters::fixtures::MadeUpGame;
     use crate::testkit::{GAME, World, put};
-    use sul_core::manifest::Variant;
+    use sul_trust::manifest::Variant;
 
     fn games() -> Vec<(String, String)> {
         vec![

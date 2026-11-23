@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use sul_core::error::io;
 use sul_core::fsops::{self, ProtectedRoots};
-use sul_core::manifest::now_unix;
 use sul_core::{Error, Result};
+use sul_trust::manifest::now_unix;
 
 use super::store::ModStore;
 use super::{

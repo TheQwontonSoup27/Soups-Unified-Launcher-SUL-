@@ -20,13 +20,13 @@ use sul_builds::adapters::AdapterRegistry;
 use sul_builds::catalogue::GameDetail;
 use sul_builds::process::{ProcessLauncher, StdLauncher};
 use sul_builds::roots::{DiskSpace, RootKind, SystemDiskSpace};
-use sul_core::manifest::{Variant, VerifyReport};
 use sul_launcher::registry::{GameScanner, ScanOptions, system_scanner};
 use sul_launcher::service::{GameView, LibraryService, MatrixView, ScanView};
 use sul_launcher::steam::SteamManager;
 use sul_mod::builder::recipe::{Recipe, RunPlan, RunRecord};
 use sul_mod::builder::tools::{StoredRunRecords, ToolRunPlan};
 use sul_mod::mods::deploy::{DeployPlan, PurgePlan};
+use sul_trust::manifest::{Variant, VerifyReport};
 use tauri::State;
 
 /// What the commands share, built once at startup. Cloning is cheap and every clone shares the

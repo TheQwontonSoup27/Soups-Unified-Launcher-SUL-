@@ -1,0 +1,20 @@
+[package]
+name = "sul-quarantine"
+description = "The quarantine of Soups Unified Launcher: set a file aside where nothing will use it, verified and reversible"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sul-core.workspace = true
+# `manifest::hash_file`, the SHA-256 the quarantine proves every copy with (D-154).
+sul-trust.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

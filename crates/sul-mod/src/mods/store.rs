@@ -15,9 +15,9 @@ use sul_builds::roots::RootKind;
 use sul_core::error::io;
 use sul_core::fsops;
 use sul_core::journal::fresh_id;
-use sul_core::manifest::{FileEntry, VerifyReport, inventory, now_unix};
 use sul_core::safepath;
 use sul_core::{Error, Result};
+use sul_trust::manifest::{FileEntry, VerifyReport, inventory, now_unix};
 
 use super::{
     MAX_LIST_LEN, MAX_TEXT_LEN, validate_mod_path, validate_name, validate_note, validate_text,

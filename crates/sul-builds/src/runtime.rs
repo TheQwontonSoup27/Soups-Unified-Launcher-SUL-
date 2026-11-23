@@ -8,7 +8,7 @@
 //! * For a build SUL manages, the program must still match the hash recorded for it; a changed program
 //!   is refused with an explanation. For an install that stays where it is (the owner's original
 //!   copy), a program that differs from the recorded baseline is reported as a warning and the launch
-//!   goes ahead: the game may simply have updated. (The game-file risk policy in [`sul_core::trust::policy`]
+//!   goes ahead: the game may simply have updated. (The game-file risk policy in [`sul_trust::policy`]
 //!   is not connected here yet; see decision 0007.)
 //! * One running instance per game. A second launch of the same game is refused, with the build that
 //!   is running named.
@@ -34,8 +34,8 @@ use crate::process::{
 use sul_core::fsops::{self, ProtectedRoots};
 use sul_core::journal::fresh_id;
 use sul_core::logging::{Logger, redact_text};
-use sul_core::manifest::{State, hash_file, now_unix};
 use sul_core::{Error, Result};
+use sul_trust::manifest::{State, hash_file, now_unix};
 
 /// How many finished launches are remembered.
 pub const HISTORY_LIMIT: usize = 50;
@@ -514,7 +514,7 @@ mod tests {
     use crate::process::fake::{FakeLauncher, Script};
     use crate::testkit::{GAME, World, put};
     use std::sync::{Arc, Mutex};
-    use sul_core::manifest::Variant;
+    use sul_trust::manifest::Variant;
 
     struct Rig {
         w: World,

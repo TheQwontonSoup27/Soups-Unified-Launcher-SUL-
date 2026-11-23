@@ -8,8 +8,8 @@
 //! would be posted has not been designed (decision 0004). Storing the address in Windows Credential Manager is decided and
 //! not built. This module only makes sure the address is handled safely when those exist.
 
-use crate::{Error, Result};
 use std::fmt;
+use sul_core::{Error, Result};
 
 /// The hosts Discord serves webhooks from.
 const HOSTS: &[&str] = &[
@@ -126,7 +126,7 @@ impl fmt::Display for WebhookUrl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logging::redact_text;
+    use sul_core::logging::redact_text;
 
     const ID: &str = "123456789012345678";
     const TOKEN: &str = "aB3_dE-fG7hI9jK1lM5nO7pQ2rS4tU6vW8xY0zA2bC4dE6fG8hI0jK2lM4nO6pQ8rS";

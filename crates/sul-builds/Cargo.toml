@@ -17,6 +17,7 @@ test-support = ["dep:tempfile"]
 
 [dependencies]
 sul-core.workspace = true
+sul-trust.workspace = true
 sul-launcher.workspace = true
 serde.workspace = true
 serde_json.workspace = true

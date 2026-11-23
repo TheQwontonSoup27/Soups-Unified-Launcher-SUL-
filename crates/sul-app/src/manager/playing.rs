@@ -15,15 +15,15 @@
 //!   file under `launch-logs/`. By default the program's output is discarded.
 //!
 //! Not here: stopping a started program, limiting what it can do, checking that a game works, any network or launcher
-//! integration, or the game-file risk policy ([`sul_core::trust::policy`]), which is not connected to launching.
+//! integration, or the game-file risk policy ([`sul_trust::policy`]), which is not connected to launching.
 
 use serde::Serialize;
 
 use super::{Inner, ManagerService};
 use sul_builds::builds::Location;
 use sul_builds::runtime::{LaunchRecord, LaunchRequest, LaunchState};
-use sul_core::manifest::State;
 use sul_core::{Error, Result};
+use sul_trust::manifest::State;
 
 /// A build the Play panel can offer, with what decides whether starting it can work at all.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -182,7 +182,7 @@ mod tests {
     use sul_builds::process::{ExitInfo, ProcessSpec};
     use sul_builds::roots::{DiskSpace, RootKind};
     use sul_builds::runtime::{NotStarted, Outcome};
-    use sul_core::manifest::Variant;
+    use sul_trust::manifest::Variant;
 
     const GAME: &str = "madeupgame";
 

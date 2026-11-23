@@ -11,7 +11,7 @@ Windows 10/11 already ships WebView2, which Tauri uses, so no extra webview inst
    ```
 5. Run the core tests (no UI needed):
    ```
-   cargo test -p sul-core -p sul-launcher -p sul-builds -p sul-mod -p sul-app
+   cargo test -p sul-core -p sul-trust -p sul-quarantine -p sul-launcher -p sul-builds -p sul-mod -p sul-app
    ```
 6. Check and test the UI:
    ```

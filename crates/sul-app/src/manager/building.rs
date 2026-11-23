@@ -19,10 +19,10 @@ use serde::Serialize;
 use super::modding::{ModView, ctx_of, layout_for};
 use super::{Inner, ManagerService, RootView, root_views};
 use sul_builds::roots::RootKind;
-use sul_core::manifest::VerifyReport;
 use sul_core::{Error, Result};
 use sul_mod::builder::OpClass;
 use sul_mod::builder::recipe::{self, Recipe, RunPlan, RunRecord};
+use sul_trust::manifest::VerifyReport;
 
 /// Most files a lookup of a mod's files returns. Chosen here to keep an answer small, not a measured figure.
 pub const MAX_LISTED_MOD_FILES: usize = 200;
@@ -156,7 +156,7 @@ impl ManagerService {
         })?;
         let needle = filter.trim().to_lowercase();
         let all = &rec.manifest.files;
-        let matching: Vec<&sul_core::manifest::FileEntry> = all
+        let matching: Vec<&sul_trust::manifest::FileEntry> = all
             .iter()
             .filter(|f| needle.is_empty() || f.path.to_lowercase().contains(&needle))
             .collect();

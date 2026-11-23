@@ -36,6 +36,8 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 /// one must be added (the next test names a file from each to prove it is covered).
 const SCANNED_CRATES: &[&str] = &[
     "sul-core",
+    "sul-trust",
+    "sul-quarantine",
     "sul-launcher",
     "sul-builds",
     "sul-mod",
@@ -192,16 +194,6 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "writes a game-compatibility template the user asked for",
     ),
     (
-        "crates/sul-core/src/trust/quarantine.rs",
-        &[
-            "create a folder",
-            "delete a file",
-            "delete a folder",
-            "open a file or pipe with options",
-        ],
-        "the quarantine: a verified copy into its own folder (created with create-new, so it never overwrites), the original removed only after the copy is proven, a restore that never overwrites; the folder removal is only for a copy that did not finish; no purge",
-    ),
-    (
         "crates/sul-core/src/updater.rs",
         &["create a folder", "create or overwrite a file"],
         "saves which updater version was last seen",
@@ -226,6 +218,16 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "sets an unreadable library file aside under a new name instead of deleting it",
     ),
     (
+        "crates/sul-quarantine/src/quarantine.rs",
+        &[
+            "create a folder",
+            "delete a file",
+            "delete a folder",
+            "open a file or pipe with options",
+        ],
+        "the quarantine: a verified copy into its own folder (created with create-new, so it never overwrites), the original removed only after the copy is proven, a restore that never overwrites; the folder removal is only for a copy that did not finish; no purge",
+    ),
+    (
         "src-tauri/src/ipc_tests.rs",
         &[
             "create a folder",
@@ -247,10 +249,11 @@ fn the_scan_covers_the_source_it_is_meant_to() {
     assert!(all.len() >= 25, "found {} files", all.len());
     for must in [
         "crates/sul-core/src/fsops.rs",
-        "crates/sul-core/src/trust/quarantine.rs",
+        "crates/sul-quarantine/src/quarantine.rs",
         "src-tauri/src/lib.rs",
         "crates/sul-core/src/logging.rs",
         // One file from each of the other crates the old `sul-core` was split into.
+        "crates/sul-trust/src/webhook.rs",
         "crates/sul-launcher/src/steam.rs",
         "crates/sul-builds/src/process.rs",
         "crates/sul-mod/src/mods/deploy.rs",
@@ -443,7 +446,7 @@ fn only_the_quarantine_and_the_copys_own_temp_file_are_ever_deleted() {
         let deletes = kinds.contains("delete a file") || kinds.contains("delete a folder");
         assert!(
             !deletes
-                || name == "crates/sul-core/src/trust/quarantine.rs"
+                || name == "crates/sul-quarantine/src/quarantine.rs"
                 || name == "crates/sul-core/src/fsops.rs",
             "{name} deletes"
         );
@@ -551,9 +554,7 @@ fn no_field_or_key_is_named_like_a_secret_except_the_webhook_type() {
     for (name, text) in sources() {
         // The webhook type is the one place built to hold a secret. The log redactor lists secret-like names so it can
         // hide their values; that is its job.
-        if name == "crates/sul-core/src/trust/webhook.rs"
-            || name == "crates/sul-core/src/logging.rs"
-        {
+        if name == "crates/sul-trust/src/webhook.rs" || name == "crates/sul-core/src/logging.rs" {
             continue;
         }
         for (n, line) in production(&name, &text).lines().enumerate() {
@@ -572,7 +573,7 @@ fn no_field_or_key_is_named_like_a_secret_except_the_webhook_type() {
 fn the_webhook_type_cannot_be_written_to_a_file_by_accident() {
     let (name, text) = sources()
         .into_iter()
-        .find(|(n, _)| n.ends_with("trust/webhook.rs"))
+        .find(|(n, _)| n == "crates/sul-trust/src/webhook.rs")
         .unwrap();
     let code = production(&name, &text);
     assert!(
@@ -603,6 +604,8 @@ fn no_credential_store_or_network_client_is_declared_yet() {
     for manifest in [
         "Cargo.toml",
         "crates/sul-core/Cargo.toml",
+        "crates/sul-trust/Cargo.toml",
+        "crates/sul-quarantine/Cargo.toml",
         "crates/sul-launcher/Cargo.toml",
         "crates/sul-builds/Cargo.toml",
         "crates/sul-mod/Cargo.toml",
@@ -713,6 +716,8 @@ fn sul_net_is_an_empty_boundary_until_the_network_is_decided() {
     );
     for manifest in [
         "crates/sul-core/Cargo.toml",
+        "crates/sul-trust/Cargo.toml",
+        "crates/sul-quarantine/Cargo.toml",
         "crates/sul-launcher/Cargo.toml",
         "crates/sul-builds/Cargo.toml",
         "crates/sul-mod/Cargo.toml",

@@ -16,13 +16,13 @@
 //! hive-mind and Jarvis may add to it (owner, 2026-10-31); every entry records who added it, when and why. No list exists in
 //! SUL yet, so [`KnownHarmful::empty`] is the only list there is today and **nothing is automatic**. A change event, a hash that
 //! differs from the baseline, or a suspicious signal is *unknown*, not known-harmful: updates, installers and antivirus all change
-//! files, and a changed file is not proof of anything (see [`super::Certainty`]).
+//! files, and a changed file is not proof of anything (see [`crate::findings::Certainty`]).
 //!
 //! A list can be wrong, and entries can come from software, so one guard sits in front of the automatic action: a file whose
 //! content is exactly what SUL recorded for it (its baseline) is not an *alteration*, so a list entry that matches it is a
 //! conflict for a person to resolve, never a reason to move it.
 //!
-//! This module decides; it does not touch a file. The caller still goes through [`super::quarantine::Quarantine`], which
+//! This module decides; it does not touch a file. The caller still goes through `sul_quarantine::quarantine::Quarantine`, which
 //! journals the move, keeps it reversible and refuses original installs on its own. Stopping the game is the caller's job too, and
 //! only covers launching through SUL: nothing here can stop the owner starting the game some other way.
 
@@ -31,13 +31,14 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use super::Certainty;
-use crate::error::io;
-use crate::fsops::ProtectedRoots;
-use crate::safepath::resolve_lenient;
-use crate::{Error, Result};
+use crate::findings::Certainty;
+use sul_core::error::io;
+use sul_core::fsops::ProtectedRoots;
+use sul_core::safepath::resolve_lenient;
+use sul_core::{Error, Result};
 
-/// Which verification model a file falls under (spec V5.1, section 12.7: the Two-Tier Verification Boundary).
+/// Which verification model a file falls under (Ch. 14 §14.13.1: Tier 1 is SUL's own code, Tier 2 is external protected
+/// runtimes; `Unclassified` is this module's own third case).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tier {
@@ -85,9 +86,9 @@ impl Tiering {
 #[serde(rename_all = "snake_case")]
 pub enum ListSource {
     Owner,
-    /// The shared threat log (`sul-hive-mind`, spec V5.1 12.7).
+    /// The shared threat log (`sul-hive-mind`, Ch. 14 §14.13).
     HiveMind,
-    /// The orchestrator agent (spec V5.1 12.1).
+    /// The orchestrator agent (Jarvis, Ch. 14 §14.2.1).
     Jarvis,
 }
 
@@ -261,7 +262,7 @@ pub enum Action {
     ReportOnly,
     /// Show it to the owner and wait. Nothing is moved or changed until they say so.
     AskOwner,
-    /// SUL's own file, known-harmful content: it may be quarantined now (journaled and reversible, see [`super::quarantine`]).
+    /// SUL's own file, known-harmful content: it may be quarantined now (journaled and reversible, see `sul_quarantine`).
     QuarantineAutomatically,
     /// A game whose files were edited in a way that risks it: SUL does not launch it. It never touches the files; it offers the
     /// vendor's own verification (for example Steam's "Verify integrity of game files").
@@ -356,8 +357,6 @@ pub fn decide(obs: &Observation, known: &KnownHarmful) -> Decision {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::hash_file;
-    use crate::trust::quarantine::Quarantine;
 
     const BAD: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     const OTHER: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
@@ -766,60 +765,6 @@ mod tests {
             )
             .is_err()
         );
-    }
-
-    #[test]
-    fn the_rule_and_the_quarantine_agree_end_to_end() {
-        let tmp = tempfile::tempdir().unwrap();
-        let own = tmp.path().join("sul");
-        let game = tmp.path().join("game");
-        std::fs::create_dir_all(&own).unwrap();
-        std::fs::create_dir_all(&game).unwrap();
-        let mut external = ProtectedRoots::new();
-        external.add(&game).unwrap();
-        let tiering = Tiering::new(&[own.as_path()], external.clone()).unwrap();
-        let q = Quarantine::open(&tmp.path().join("quarantine"), external).unwrap();
-
-        let ours = own.join("sidecar.exe");
-        let theirs = game.join("anticheat.dll");
-        std::fs::write(&ours, b"tampered sidecar").unwrap();
-        std::fs::write(&theirs, b"tampered anticheat").unwrap();
-        let ours_hash = hash_file(&ours).unwrap().0;
-        let theirs_hash = hash_file(&theirs).unwrap().0;
-        let mut known = KnownHarmful::empty();
-        known
-            .add(&ours_hash, ListSource::HiveMind, "tampered sidecar", 1)
-            .unwrap();
-        known
-            .add(&theirs_hash, ListSource::Jarvis, "tampered anticheat", 2)
-            .unwrap();
-
-        // SUL's own file with known-harmful content: automatic, and the quarantine can undo it.
-        let o =
-            Observation::new(tiering.classify(&ours), Certainty::Confirmed).with_sha256(&ours_hash);
-        let d = decide(&o, &known);
-        assert_eq!(
-            (d.action, d.source),
-            (Action::QuarantineAutomatically, Some(ListSource::HiveMind))
-        );
-        let rec = q
-            .quarantine_file(&ours, "known-harmful content (automatic)")
-            .unwrap();
-        assert!(!ours.exists());
-        q.restore(&rec.id).unwrap();
-        assert_eq!(std::fs::read(&ours).unwrap(), b"tampered sidecar");
-
-        // The same list entry on a game's file: the game is not launched, nothing is moved, and the quarantine refuses on its own too.
-        let o = Observation::new(tiering.classify(&theirs), Certainty::Confirmed)
-            .with_sha256(&theirs_hash)
-            .with_risk(RiskKind::AntiCheatFlag);
-        assert_eq!(decide(&o, &known).action, Action::BlockLaunch);
-        assert!(q.quarantine_file(&theirs, "must be refused").is_err());
-        assert_eq!(std::fs::read(&theirs).unwrap(), b"tampered anticheat");
-        // Owner-modded: a warning they can override, and still nothing is moved.
-        let modded = o.with_game(GameModStatus::OwnerModded);
-        assert_eq!(decide(&modded, &known).action, Action::WarnOwnerOverridable);
-        assert_eq!(std::fs::read(&theirs).unwrap(), b"tampered anticheat");
     }
 
     #[test]

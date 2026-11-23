@@ -42,9 +42,9 @@ use sul_builds::builds::{BuildRegistry, COPY_MARGIN_BYTES, Ctx, Location};
 use sul_core::error::io;
 use sul_core::fsops;
 use sul_core::journal::fresh_id;
-use sul_core::manifest::{BuildManifest, FileEntry, PatchRef, Variant, hash_file, now_unix};
 use sul_core::safepath;
 use sul_core::{Error, Result};
+use sul_trust::manifest::{BuildManifest, FileEntry, PatchRef, Variant, hash_file, now_unix};
 
 use super::profile::{Problem, ProblemKind, Profile, Severity, check_profile};
 use super::store::ModStore;
@@ -1395,7 +1395,7 @@ mod tests {
     use super::super::store::{ModImport, Requirement};
     use super::*;
     use sul_builds::testkit::{GAME, World, put};
-    use sul_core::manifest::{State, inventory};
+    use sul_trust::manifest::{State, inventory};
 
     struct Fx {
         w: World,
@@ -1591,13 +1591,13 @@ mod tests {
         let mut expected = before.clone();
         expected.insert(
             "mods/mine.txt".into(),
-            sul_core::manifest::hash_file(&f.dir().join("mods/mine.txt"))
+            sul_trust::manifest::hash_file(&f.dir().join("mods/mine.txt"))
                 .unwrap()
                 .0,
         );
         expected.insert(
             "data/c.bin".into(),
-            sul_core::manifest::hash_file(&f.dir().join("data/c.bin"))
+            sul_trust::manifest::hash_file(&f.dir().join("data/c.bin"))
                 .unwrap()
                 .0,
         );
@@ -1992,7 +1992,7 @@ mod tests {
         put(&f.dir().join("mods/blocker"), "i am a file");
         // Keep the build sound by recording the file in its manifest through the same door a deploy uses.
         let rec = f.reg.manifest(&f.w.ctx(), &f.build).unwrap();
-        let (sha, size) = sul_core::manifest::hash_file(&f.dir().join("mods/blocker")).unwrap();
+        let (sha, size) = sul_trust::manifest::hash_file(&f.dir().join("mods/blocker")).unwrap();
         let mut files = rec.files.clone();
         files.push(FileEntry {
             path: "mods/blocker".into(),

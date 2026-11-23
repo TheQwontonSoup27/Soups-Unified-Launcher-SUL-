@@ -179,8 +179,8 @@ mod tests {
     use sul_builds::process::fake::{FakeLauncher, Script};
     use sul_builds::roots::{DiskSpace, RootKind};
     use sul_builds::runtime::LaunchState;
-    use sul_core::manifest::{State, Variant};
     use sul_launcher::capability::Status;
+    use sul_trust::manifest::{State, Variant};
 
     const GAME: &str = "madeupgame";
 

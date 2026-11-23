@@ -2,6 +2,8 @@
 
 Status: **done on 2026-11-21 on branch `rebuild/r0-bootstrap`; not merged into `main`.** It carries out the plan the owner approved on 2026-11-20 (`docs/decisions/0009`, "Owner answers"). The Windows CI result for the commit is recorded in `docs/SESSION_STATE.md`.
 
+**Update 2026-11-23:** `manifest` and `trust/*`, which this record leaves in `sul-core` (sections 1, 5 and 6), have since moved: `sul-trust`, a new `sul-quarantine`, and the package scan in `sul-mod` (`docs/decisions/0011-trust-split.md`, D-154). The crate count is now seven. The text below is what was true on 2026-11-21.
+
 In plain words: the old single crate `sul-core` held everything (32,772 lines of Rust with its tests): file safety, finding games, managed builds, mods, and the service the app calls. It is now five crates, each depending only on the ones before it. Code and tests moved with `git mv` and no behaviour was changed. The one deliberate change to the test count is explained in section 4.
 
 ## 1. The crates

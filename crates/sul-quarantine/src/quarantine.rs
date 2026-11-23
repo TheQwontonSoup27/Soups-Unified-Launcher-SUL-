@@ -11,19 +11,21 @@
 //!   (preview, confirmation, log). The only file this module removes after a restore is the quarantined copy, and only after the
 //!   restored file has been checked to be identical to it.
 //!
+//! Not encrypted yet (see the crate documentation, D-154).
+//!
 //! Limits: a restored file has new timestamps and default permissions (the copy does not carry them), and a file that another
 //! program has open and locked cannot be removed, in which case the quarantine is undone and an error is returned.
 
-use crate::fsops::{ProtectedRoots, atomic_write};
-use crate::journal::Journal;
-use crate::manifest::hash_file;
-use crate::{Error, Result, error::io};
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use sul_core::fsops::{ProtectedRoots, atomic_write};
+use sul_core::journal::Journal;
+use sul_core::{Error, Result, error::io};
+use sul_trust::manifest::hash_file;
 
 const SCHEMA_VERSION: u32 = 1;
 const MAX_REASON: usize = 500;
@@ -224,7 +226,7 @@ impl Quarantine {
         let reason = check_reason(reason)?;
         require_regular_file(source)?;
         self.protected.check_writable(source)?;
-        if crate::safepath::resolve_lenient(source).starts_with(&self.root) {
+        if sul_core::safepath::resolve_lenient(source).starts_with(&self.root) {
             return Err(Error::Invalid(
                 "a file that is already in quarantine cannot be quarantined again".into(),
             ));
@@ -976,7 +978,7 @@ mod tests {
             f.q.root.join("journal.jsonl"),
             format!(
                 "{}\n",
-                serde_json::to_string(&crate::journal::Record::Begin {
+                serde_json::to_string(&sul_core::journal::Record::Begin {
                     id: r.id.clone(),
                     op: "quarantine".into(),
                     detail: r.original_path.clone()
@@ -1055,7 +1057,7 @@ mod tests {
         let file = put(&f.work, "mod.dll", b"bytes");
         let r = f.q.quarantine_file(&file, "x").unwrap();
         let begin = |f: &Fixture| {
-            let rec = crate::journal::Record::Begin {
+            let rec = sul_core::journal::Record::Begin {
                 id: format!("restore-{}", r.id),
                 op: "restore".into(),
                 detail: r.original_path.clone(),
@@ -1090,7 +1092,7 @@ mod tests {
         let file = put(&f.work, "mod.dll", b"bytes");
         let r = f.q.quarantine_file(&file, "x").unwrap();
         std::fs::write(&file, b"something else").unwrap();
-        let rec = crate::journal::Record::Begin {
+        let rec = sul_core::journal::Record::Begin {
             id: format!("restore-{}", r.id),
             op: "restore".into(),
             detail: r.original_path.clone(),

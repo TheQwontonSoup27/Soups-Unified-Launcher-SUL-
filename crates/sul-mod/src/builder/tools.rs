@@ -33,9 +33,9 @@ use crate::mods::{validate_name, validate_note, validate_text};
 use sul_builds::process::{Child, ExitInfo, ProcessLauncher, ProcessSpec, check_args_and_env};
 use sul_core::error::io;
 use sul_core::fsops::{self, ProtectedRoots};
-use sul_core::manifest::{FileEntry, hash_file, inventory, now_unix};
 use sul_core::{Error, Result};
 use sul_launcher::capability::Status;
+use sul_trust::manifest::{FileEntry, hash_file, inventory, now_unix};
 
 pub const TOOLS_SCHEMA: u32 = 1;
 pub const MAX_SETTINGS: usize = 32;

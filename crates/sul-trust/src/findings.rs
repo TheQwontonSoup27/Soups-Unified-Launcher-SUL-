@@ -1,8 +1,11 @@
-//! Security & Trust building blocks: integrity checks, package scanning, quarantine, the rule for when SUL may act without
-//! asking ([`policy`]) and webhook-address checking.
+//! What the trust checks report, shared by all of them: [`Finding`], [`Certainty`], [`ProgramKind`] and the disclaimer
+//! [`NOT_A_GUARANTEE`]. These were the root of the old `sul-core::trust` module (D-154).
 //!
-//! These are library code with tests. Nothing in the app calls them yet (there is no mod manager to hand them a package),
-//! and none of them is an antivirus: they look at names, sizes, file types and hashes, never at what code does.
+//! The checks that use them are the integrity checks ([`crate::integrity`], in this crate), package scanning (`sul-mod`'s
+//! `package` module, which depends on this crate), the quarantine (`sul-quarantine`), the rule for when SUL may act without
+//! asking ([`crate::policy`]) and webhook-address checking ([`crate::webhook`]). They are library code with tests. Nothing in
+//! the app calls them yet (there is no mod manager to hand them a package), and none of them is an antivirus: they look at
+//! names, sizes, file types and hashes, never at what code does.
 //!
 //! Two words are used on purpose, and kept apart everywhere:
 //! * **Confirmed**: the evidence settles the fact (a hash differs from the recorded one; a path climbs out of its folder).
@@ -13,12 +16,6 @@
 //! "No findings" is never reported as "safe" ([`NOT_A_GUARANTEE`]).
 
 use serde::Serialize;
-
-pub mod integrity;
-pub mod package;
-pub mod policy;
-pub mod quarantine;
-pub mod webhook;
 
 /// How sure a finding is. See the module documentation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -38,7 +35,7 @@ pub struct Finding {
 }
 
 impl Finding {
-    pub(crate) fn confirmed(code: &'static str, path: &str, detail: impl Into<String>) -> Self {
+    pub fn confirmed(code: &'static str, path: &str, detail: impl Into<String>) -> Self {
         Self {
             certainty: Certainty::Confirmed,
             code,
@@ -47,7 +44,7 @@ impl Finding {
         }
     }
 
-    pub(crate) fn suspicious(code: &'static str, path: &str, detail: impl Into<String>) -> Self {
+    pub fn suspicious(code: &'static str, path: &str, detail: impl Into<String>) -> Self {
         Self {
             certainty: Certainty::Suspicious,
             code,
@@ -74,7 +71,7 @@ pub enum ProgramKind {
 }
 
 /// The last extension of a forward- or back-slash path's file name, in lower case.
-pub(crate) fn extension(path: &str) -> Option<String> {
+pub fn extension(path: &str) -> Option<String> {
     let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
     let (stem, ext) = name.rsplit_once('.')?;
     if stem.is_empty() || ext.is_empty() {

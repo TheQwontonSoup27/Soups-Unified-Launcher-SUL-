@@ -1,6 +1,6 @@
 [package]
 name = "sul-core"
-description = "The substrate of Soups Unified Launcher: errors, safe paths and file operations, the recovery journal, logging, storage layout, build manifests and trust checks"
+description = "The substrate of Soups Unified Launcher: errors, safe paths and file operations, the recovery journal, logging, storage layout, templates, the updater version log and portable mode"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,8 +11,6 @@ repository.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-sha2.workspace = true
-hex.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

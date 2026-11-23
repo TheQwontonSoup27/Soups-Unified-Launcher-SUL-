@@ -8,6 +8,7 @@ members = [
     "crates/sul-ring",
     "crates/sul-wire",
     "crates/sul-trust",
+    "crates/sul-quarantine",
     "crates/sul-metrics",
     "xtask",
     # Carried over from the V5.1 build and being merged into the layout above (docs/SESSION_STATE.md)
@@ -92,9 +93,11 @@ windows = { version = "0.59.0", features = [
 ] }
 
 # Workspace crates
-# Layered, each depending only on the ones above it: sul-core <- sul-launcher <- sul-builds <- sul-mod <- sul-app
-# (docs/decisions/0009-sul-core-merge-map.md, docs/decisions/0010-sul-core-split.md).
+# Layered, each depending only on the ones before it in this order: sul-core, sul-trust, sul-quarantine, sul-launcher,
+# sul-builds, sul-mod, sul-app (docs/decisions/0009-sul-core-merge-map.md, 0010-sul-core-split.md, 0011-trust-split.md).
 sul-core = { path = "crates/sul-core" }
+sul-trust = { path = "crates/sul-trust" }
+sul-quarantine = { path = "crates/sul-quarantine" }
 sul-launcher = { path = "crates/sul-launcher" }
 sul-builds = { path = "crates/sul-builds" }
 sul-mod = { path = "crates/sul-mod" }

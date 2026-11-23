@@ -34,12 +34,12 @@ use sul_builds::runtime::RuntimeManager;
 use sul_core::fsops::ProtectedRoots;
 use sul_core::journal::Journal;
 use sul_core::logging::Logger;
-use sul_core::manifest::Variant;
 use sul_core::{Error, Result};
 use sul_mod::builder::book::RecipeBook;
 use sul_mod::builder::tools::ToolRegistry;
 use sul_mod::mods::profile::Profiles;
 use sul_mod::mods::store::ModStore;
+use sul_trust::manifest::Variant;
 
 mod building;
 mod cataloguing;
@@ -523,7 +523,7 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
-    use sul_core::manifest::State;
+    use sul_trust::manifest::State;
 
     struct Disk(Cell<u64>);
     // `Cell` is not `Sync`, but the service only needs `Send`, and a test disk is used by one thread.

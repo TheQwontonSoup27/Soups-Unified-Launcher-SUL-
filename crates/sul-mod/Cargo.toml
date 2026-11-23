@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 sul-core.workspace = true
+sul-trust.workspace = true
 sul-launcher.workspace = true
 sul-builds.workspace = true
 serde.workspace = true

@@ -33,13 +33,13 @@ use super::{Inner, ManagerService, RootView, root_views};
 use sul_builds::process::{ProcessLauncher, ProcessSpec};
 use sul_builds::roots::RootKind;
 use sul_core::journal::fresh_id;
-use sul_core::manifest::now_unix;
 use sul_core::{Error, Result};
 use sul_mod::builder::recipe;
 use sul_mod::builder::tools::{
     self, KnownTool, Redistribution, StoredRunRecords, ToolRecord, ToolRegistration, ToolRunHandle,
     ToolRunPlan, ToolRunRecord, ToolRunSpec, ToolStatus,
 };
+use sul_trust::manifest::now_unix;
 
 /// Most tools followed at once. Chosen here to keep the page and the program count bounded, not a measured figure.
 pub const MAX_RUNNING_TOOLS: usize = 4;

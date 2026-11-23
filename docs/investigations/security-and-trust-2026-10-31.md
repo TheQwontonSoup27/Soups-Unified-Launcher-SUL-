@@ -3,6 +3,8 @@
 Scope (owner's task, 2026-10-30): every item on `Settings > Security & Trust` that was labelled "Not investigated", plus the unverified network
 and credential statements on that page. For each: audit, then build or verify what needs no new decision, then test, then say plainly what is still unconfirmed.
 
+Note, 2026-11-23: the `crates/sul-core/src/trust/*` paths below are where the code was when this was written. It has since moved (decision `docs/decisions/0011-trust-split.md`): integrity checks and webhook checking are in `crates/sul-trust`, the quarantine is in `crates/sul-quarantine`, package scanning is in `crates/sul-mod/src/package.rs`. The text is kept as written.
+
 Branch: `feature/security-trust-investigation` (on top of `feature/section-2-security-trust-pane`; neither is merged into `main`).
 Environment: Linux container, cargo 1.97, Node 22.23. Nothing here was run on Windows by hand; the Windows results are the CI run named in `PROJECT_STATUS.md`.
 

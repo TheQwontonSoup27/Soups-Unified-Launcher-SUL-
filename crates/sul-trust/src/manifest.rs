@@ -16,14 +16,14 @@
 //! applied, the mod profiles that reference the build, compatibility notes, and verification and
 //! update timestamps.
 
-use crate::fsops::{self, ProtectedRoots};
-use crate::{Error, Result, error::io, safepath};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use sul_core::fsops::{self, ProtectedRoots};
+use sul_core::{Error, Result, error::io, safepath};
 
 pub const SCHEMA_VERSION: u32 = 2;
 
@@ -55,7 +55,8 @@ pub struct FileEntry {
     pub size: u64,
 }
 
-/// A modification recorded against a build (spec 1.3: "patches/modifications").
+/// A modification recorded against a build (old spec 1.3, "patches/modifications"; the new spec has no counterpart, decision
+/// 0009 row B).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PatchRef {
     pub id: String,

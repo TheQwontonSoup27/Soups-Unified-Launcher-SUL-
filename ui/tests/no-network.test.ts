@@ -37,7 +37,7 @@ describe("SUL's own Rust code", () => {
   });
 
   test("no HTTP or socket crate is declared as a dependency", () => {
-    const manifests = ["Cargo.toml", ...["sul-core", "sul-launcher", "sul-builds", "sul-mod", "sul-app"].map((c) => `crates/${c}/Cargo.toml`), "src-tauri/Cargo.toml"];
+    const manifests = ["Cargo.toml", ...["sul-core", "sul-trust", "sul-quarantine", "sul-launcher", "sul-builds", "sul-mod", "sul-app"].map((c) => `crates/${c}/Cargo.toml`), "src-tauri/Cargo.toml"];
     for (const m of manifests) {
       const names = [...read(join(repo, m)).matchAll(/^\s*([A-Za-z0-9_-]+)\s*(?:=|\.)/gm)].map((x) => x[1]!.toLowerCase());
       for (const crate of NETWORK_CRATES) assert.ok(!names.includes(crate), `${m} declares ${crate}`);

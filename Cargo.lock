@@ -3408,6 +3408,7 @@ dependencies = [
  "sul-core",
  "sul-launcher",
  "sul-mod",
+ "sul-trust",
  "tempfile",
 ]
 
@@ -3419,6 +3420,7 @@ dependencies = [
  "serde_json",
  "sul-core",
  "sul-launcher",
+ "sul-trust",
  "tempfile",
 ]
 
@@ -3426,10 +3428,8 @@ dependencies = [
 name = "sul-core"
 version = "0.1.0"
 dependencies = [
- "hex",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "thiserror 2.0.21",
 ]
@@ -3477,12 +3477,25 @@ dependencies = [
  "sul-builds",
  "sul-core",
  "sul-launcher",
+ "sul-trust",
  "tempfile",
 ]
 
 [[package]]
 name = "sul-net"
 version = "0.1.0"
+
+[[package]]
+name = "sul-quarantine"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sul-core",
+ "sul-trust",
+ "tempfile",
+]
 
 [[package]]
 name = "sul-ring"
@@ -3504,6 +3517,7 @@ dependencies = [
  "sul-core",
  "sul-launcher",
  "sul-mod",
+ "sul-trust",
  "tauri",
  "tauri-build",
  "tempfile",
@@ -3517,6 +3531,12 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sul-core",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

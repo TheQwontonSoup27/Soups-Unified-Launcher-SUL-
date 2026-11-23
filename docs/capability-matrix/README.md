@@ -7,6 +7,8 @@ Per-game rows in the app derive their label from the compatibility verdict plus 
 
 Note, 2026-11-21: the crate `sul-core` that the rows below name was split into five crates (decision 0010). Each row keeps the crate name that was true on its test date and no evidence date was changed. Where the code is now: game discovery, Steam, the tick matrix, capability labels, the library index and Discord presence are in `sul-launcher`; builds, library roots, adapters, the launch manager and the catalogue in `sul-builds`; mods, recipes, patches and tools in `sul-mod`; the manager service in `sul-app`; safe files, journal, logging, manifests and trust checks stay in `sul-core`. The tests moved unchanged.
 
+Note, 2026-11-23: the last part of that note is out of date. `manifest` and the trust checks have left `sul-core` too (decision 0011, D-154): manifests, integrity checks, the act-without-asking rule (`trust::policy`) and webhook-address checking are in `sul-trust`; the quarantine is in `sul-quarantine` (still not encrypted); package scanning is in `sul-mod`. Rows that name `sul-core` for those keep the crate name that was true on their test date; no evidence date changed.
+
 Reset on 2026-10-26: the earlier rows cited a GitHub Actions run on the code that Step 1.5 replaced, so that evidence no longer applies.
 Evidence below is the Linux-container runs of 2026-10-26 plus GitHub Actions run 40276520399 (commit 04c968f, windows-latest: fmt,
 clippy, `cargo test -p sul-core`, UI typecheck/tests/build, Tauri wrapper clippy/tests all passed; per-test output not read).

@@ -14,11 +14,13 @@
 //! declares, which an archive can lie about, so a real unpacker must enforce its own limits while it writes. ZIP64 and
 //! multi-disk archives are refused rather than guessed at.
 
-use super::{Certainty, Finding, NOT_A_GUARANTEE, ProgramKind, extension, program_kind};
-use crate::{Error, Result, error::io};
 use std::collections::BTreeMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
+use sul_core::{Error, Result, error::io};
+use sul_trust::findings::{
+    Certainty, Finding, NOT_A_GUARANTEE, ProgramKind, extension, program_kind,
+};
 
 /// One item in a package, as stored.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -991,6 +993,26 @@ mod tests {
         );
     }
 
+    /// Test helper: make a folder junction (a folder link Windows lets anyone create; a symlink needs a privilege). The same
+    /// helper is in `sul-trust` (`findings.rs`); each crate keeps its own so that no test-support feature is needed.
+    #[cfg(windows)]
+    fn make_junction(link: &Path, target: &Path) {
+        use std::os::windows::process::CommandExt;
+        let made = std::process::Command::new("cmd")
+            .raw_arg(format!(
+                r#"/C mklink /J "{}" "{}""#,
+                link.display(),
+                target.display()
+            ))
+            .output()
+            .unwrap();
+        assert!(
+            made.status.success(),
+            "mklink failed: {}",
+            String::from_utf8_lossy(&made.stdout)
+        );
+    }
+
     /// Runs on Windows only (CI): it needs a real folder junction.
     #[cfg(windows)]
     #[test]
@@ -1001,7 +1023,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("secret.dll"), b"MZ").unwrap();
-        super::super::make_junction(&root.join("link"), &outside);
+        make_junction(&root.join("link"), &outside);
         let s = scan_directory(&root, &Limits::default()).unwrap();
         assert_eq!(s.entries, 1, "the link's target was not entered");
         assert_eq!(codes(&s.confirmed), ["symlink_entry"]);

@@ -15,7 +15,7 @@ mod kit {
     use crate::roots::{LibraryRoots, RootKind};
     use sul_core::fsops::ProtectedRoots;
     use sul_core::journal::Journal;
-    use sul_core::manifest::Variant;
+    use sul_trust::manifest::Variant;
 
     pub const GAME: &str = "madeupgame";
 

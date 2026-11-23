@@ -21,14 +21,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          cargo clippy -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-metrics -p xtask --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath clippy.log
+          cargo clippy -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-quarantine -p sul-metrics -p xtask --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath clippy.log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 clippy.log; exit $code }
       - name: tests
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          cargo test -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-metrics -p xtask 2>&1 | Tee-Object -FilePath test.log
+          cargo test -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-quarantine -p sul-metrics -p xtask 2>&1 | Tee-Object -FilePath test.log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 test.log; exit $code }
       - name: xtask gates
@@ -43,7 +43,8 @@ jobs:
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 gates.log; exit $code }
 
-  # The five crates the old `sul-core` was divided into (docs/decisions/0010-sul-core-split.md). The job keeps its name `core`.
+  # The five crates the old `sul-core` was divided into that sit above the trust layer (docs/decisions/0010-sul-core-split.md).
+  # `sul-trust` and `sul-quarantine` (docs/decisions/0011-trust-split.md) are linted and tested in `r0-substrate` above. The job keeps its name `core`.
   core:
     runs-on: windows-latest
     steps:

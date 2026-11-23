@@ -76,7 +76,7 @@ Recorded from the owner's messages of 2026-11-19. Where an answer differs from a
   3. `sul-builds` (about 5,000): `adapters`, `process`, `roots`, `builds`, `runtime`, `catalogue`.
   4. `sul-mod` (about 7,000): `mods`, `builder`. The name is the spec's own (Ch. 3 §2.10).
   5. `sul-app` (about 5,800): `manager`, the orchestrator the Tauri commands call.
-  6. **Placement of `manifest` and `trust/*` (about 5,100) is not decided.** They stay inside `sul-core` while steps 2 to 5 happen (the build and mod modules use `manifest`, `runtime` uses `trust`, and both only need what is already in `sul-core`). Before they move I read Ch. 14 §2.13 and Ch. 3 §2.13 and come back to the owner: likely `sul-trust` / `sul-quarantine` (encrypted, 4.4) and builds.
+  6. **(Done 2026-11-23, see `0011-trust-split.md`: the manifest went to `sul-trust`, not `sul-builds`, to avoid a dependency cycle.) Placement of `manifest` and `trust/*` (about 5,100) is not decided.** They stay inside `sul-core` while steps 2 to 5 happen (the build and mod modules use `manifest`, `runtime` uses `trust`, and both only need what is already in `sul-core`). Before they move I read Ch. 14 §2.13 and Ch. 3 §2.13 and come back to the owner: likely `sul-trust` / `sul-quarantine` (encrypted, 4.4) and builds.
   - Order: 2, 3, 4, 5 (each needs only crates already split off), then 6, then the substrate pass on what remains.
   - Names for the groups the spec does not name (`sul-launcher`, `sul-builds`, `sul-app`) were approved as proposed.
   - **Old-spec references are rewritten as each module moves** (doc comments such as "spec section 1" or "V5.1" become the new spec's chapters). A claim that cannot be matched to a new-spec chapter is flagged for the owner, not given an invented citation.

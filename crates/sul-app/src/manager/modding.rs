@@ -20,7 +20,6 @@ use super::{Inner, ManagerService, RootView, root_views};
 use sul_builds::adapters::ModLayout;
 use sul_builds::builds::{BuildRecord, Ctx, Location};
 use sul_builds::roots::RootKind;
-use sul_core::manifest::VerifyReport;
 use sul_core::{Error, Result};
 use sul_mod::mods::deploy::{
     self, DeployPlan, DeployReport, DeployStatus, HistoryItem, PurgeAndDeployReport, PurgePlan,
@@ -28,6 +27,7 @@ use sul_mod::mods::deploy::{
 };
 use sul_mod::mods::profile::{Problem, ProblemKind, Profile, check_profile};
 use sul_mod::mods::store::{ModImport, ModRecord, Requirement};
+use sul_trust::manifest::VerifyReport;
 
 /// An imported mod, without its file list (a mod can have tens of thousands of files).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -606,10 +606,10 @@ mod tests {
     use sul_builds::adapters::fixtures::MadeUpGame;
     use sul_builds::adapters::{AdapterRegistry, GameAdapter, LaunchPlan, ModLayout, Recognition};
     use sul_builds::roots::DiskSpace;
-    use sul_core::manifest::Variant;
     use sul_launcher::capability::CapabilityEntry;
     use sul_mod::mods::deploy::PurgeAction;
     use sul_mod::mods::profile::Severity;
+    use sul_trust::manifest::Variant;
 
     const GAME: &str = "madeupgame";
 

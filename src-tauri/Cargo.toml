@@ -23,6 +23,7 @@ serde.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 sul-core.workspace = true
+sul-trust.workspace = true
 sul-launcher.workspace = true
 sul-builds.workspace = true
 sul-mod.workspace = true
