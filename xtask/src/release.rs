@@ -1,24 +1,28 @@
-//! The release-ladder check for `cargo xtask release-check` (SUL-LEDGER/releases.md section 3, "The Release Ladder", and
-//! guards.md "Release-plan guards").
+//! The release-ladder check for `cargo xtask release-check` (SUL-BRIEF.md section 3, "The Release Ladder", and guards.md
+//! "Release-plan guards").
 //!
-//! releases.md is the single source of truth for what ships in which release, and CI "parses the Markdown tables"
-//! (guards.md, Source of truth). The one table it holds is the ladder: `Release, Version, Name, Purpose, Prerequisite
-//! gates`, tab-separated, rows R0 to R4. This reads that table and checks:
+//! Where the data is (D-150): `SUL-LEDGER/releases.md` is meant to be the single source of truth for what ships in which
+//! release, but the release plan has not been written and the file is a placeholder. The ladder and the Tier 1-core event
+//! list are in `SUL-BRIEF.md` (sections 3 and 6.8), so this reads them there. The ladder is a tab-separated table: `Release,
+//! Version, Name, Purpose, Prerequisite gates`, rows R0 to R4. This reads that table and checks:
 //!
 //! - the ladder lists R0, R1, R2, R3 and R4, once each, in that order;
 //! - the version ranges rise from one release to the next (R4, "n/a", is research only and has none);
 //! - every prerequisite gate the ladder names (`A.26`, `A.63-Instruct`, a range such as `A.119–A.124`) has a heading in
-//!   gates.md, so no release waits on a gate that does not exist;
+//!   gates.md, so no release waits on a gate that does not exist. A gate id inside parentheses is a note about the row, not a
+//!   prerequisite of it, and is not read: the brief's R1 row says "(A.63-Thinking and A.63-Router are A.2 gated shipping
+//!   components for R1)", where "A.2" is a bucket, not the gate that happens to have that id;
 //! - the release asked for is on the ladder and the workspace version is in its range (v0.1 is R0, so `0.1.x` for R0);
-//! - the 21 Tier 1-core events releases.md lists (section 6.8) are exactly the events of `sul_ipc_types::Tier1Event`, in the
-//!   same order, so the approvals file's identifiers cannot drift from the ledger.
+//! - the 21 Tier 1-core events SUL-BRIEF.md lists (section 6.8) are exactly the events of `sul_ipc_types::Tier1Event`, in the
+//!   same order, so the approvals file's identifiers cannot drift from the spec.
 //!
-//! What this is NOT: the rest of the release-plan guards. releases.md *describes* `[release.R<n>]` and
-//! `[reference_config.R<n>]` blocks (lines 97 and 99) but holds none, so "every release has a reference config", "every
-//! component resolves to a crate or toggle", the superset invariant and the classification of the Tier 1 events that R1 to R3
-//! add (`tier1_events_added`) have no data to be checked against. gates.md records each gate's criterion and not whether it has passed, so only existence is checked. The
-//! installed `%APPDATA%/SUL/release.toml` is a runtime matter. guards.md says releases.md must sit "at the workspace root";
-//! releases.md itself says its canonical location is `SUL-LEDGER/releases.md`, which is where this looks.
+//! What this is NOT: the rest of the release-plan guards. The brief and guards.md *describe* `[release.R<n>]` and
+//! `[reference_config.R<n>]` blocks but none exists, so "every release has a reference config", "every component resolves to
+//! a crate or toggle", the superset invariant and the classification of the Tier 1 events that R1 to R3 add
+//! (`tier1_events_added`) have no data to be checked against. gates.md records each gate's criterion and not whether it has
+//! passed, so only existence is checked. The installed `%APPDATA%/SUL/release.toml` is a runtime matter. guards.md says
+//! releases.md must sit "at the workspace root" and the brief says its canonical location is `SUL-LEDGER/releases.md`; that
+//! file is a placeholder, so nothing here reads it.
 
 use crate::common::{ensure_repository_root, finish, read_text};
 use crate::workspace;
@@ -26,7 +30,9 @@ use miette::Result;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-pub const RELEASES_PATH: &str = "SUL-LEDGER/releases.md";
+/// Where the ladder and the Tier 1-core list are read from (D-150: `SUL-LEDGER/releases.md` is a placeholder until the release
+/// plan is written).
+pub const BRIEF_PATH: &str = "SUL-BRIEF.md";
 pub const GATES_PATH: &str = "SUL-LEDGER/gates.md";
 /// The release classes, in order.
 pub const LADDER: [&str; 5] = ["R0", "R1", "R2", "R3", "R4"];
@@ -46,8 +52,8 @@ fn is_release_id(text: &str) -> bool {
 
 /// The rows of the ladder table: the lines after the `Release<TAB>Version<TAB>...` header, up to the first line that is not
 /// a row. Blank lines between rows are skipped.
-pub fn ladder_rows(releases: &str) -> Vec<LadderRow> {
-    let mut lines = releases.lines();
+pub fn ladder_rows(brief: &str) -> Vec<LadderRow> {
+    let mut lines = brief.lines();
     if !lines.any(|line| line.starts_with("Release\tVersion\t")) {
         return Vec::new();
     }
@@ -133,8 +139,33 @@ fn digits_at(text: &str, start: usize) -> (&str, usize) {
     (&text[start..end], end)
 }
 
-/// Gate ids in a prerequisite cell: `A.26`, `A.63-Instruct`, and a range `A.119–A.124` as every number in it.
+/// `text` with everything inside parentheses blanked out. A gate id in parentheses is a note about a ladder row, not one of its
+/// prerequisites: the brief's R1 row says "(A.63-Thinking and A.63-Router are A.2 gated shipping components for R1)", and
+/// "A.2" there names a bucket, not the gate that happens to have that id (`A.2 · Iterative CADENCE round 2`). Reading it as a
+/// prerequisite would pass by accident. An unmatched `)` is left as it is.
+fn without_notes(text: &str) -> String {
+    let mut depth = 0usize;
+    text.chars()
+        .map(|c| match c {
+            '(' => {
+                depth += 1;
+                ' '
+            }
+            ')' if depth > 0 => {
+                depth -= 1;
+                ' '
+            }
+            _ if depth > 0 => ' ',
+            other => other,
+        })
+        .collect()
+}
+
+/// Gate ids in a prerequisite cell: `A.26`, `A.63-Instruct`, and a range `A.119–A.124` as every number in it. Text in
+/// parentheses is a note and is not read (see `without_notes`).
 pub fn gate_ids(text: &str) -> Vec<String> {
+    let masked = without_notes(text);
+    let text = masked.as_str();
     let bytes = text.as_bytes();
     let mut ids = Vec::new();
     let mut i = 0;
@@ -196,32 +227,32 @@ pub struct Findings {
 
 /// Runs the ladder checks on the text of the two ledger files and the workspace version.
 pub fn findings(
-    releases: Option<&str>,
+    brief: Option<&str>,
     gates: Option<&str>,
     workspace_version: Option<&str>,
     release: &str,
 ) -> Findings {
     let mut found = Findings::default();
-    let Some(releases) = releases else {
-        found.problems.push(format!("{RELEASES_PATH} is missing"));
+    let Some(brief) = brief else {
+        found.problems.push(format!("{BRIEF_PATH} is missing"));
         return found;
     };
     let Some(gates) = gates else {
         found.problems.push(format!("{GATES_PATH} is missing"));
         return found;
     };
-    let rows = ladder_rows(releases);
+    let rows = ladder_rows(brief);
     found.rows = rows.len();
     if rows.is_empty() {
         found.problems.push(format!(
-            "{RELEASES_PATH}: no release ladder table (a `Release<TAB>Version<TAB>...` header followed by rows R0 to R4)"
+            "{BRIEF_PATH}: no release ladder table (a `Release<TAB>Version<TAB>...` header followed by rows R0 to R4)"
         ));
         return found;
     }
     let listed: Vec<&str> = rows.iter().map(|r| r.id.as_str()).collect();
     if listed != LADDER {
         found.problems.push(format!(
-            "{RELEASES_PATH}: the ladder lists {} but must list {} once each, in order",
+            "{BRIEF_PATH}: the ladder lists {} but must list {} once each, in order",
             listed.join(", "),
             LADDER.join(", ")
         ));
@@ -233,7 +264,7 @@ pub fn findings(
             Some(range) => {
                 if let Some((earlier, from)) = previous.filter(|(_, from)| range.from <= *from) {
                     found.problems.push(format!(
-                        "{RELEASES_PATH}: {} starts at {} which is not above {earlier} at {}",
+                        "{BRIEF_PATH}: {} starts at {} which is not above {earlier} at {}",
                         row.id,
                         row.version,
                         format_args!("v{}.{}", from.0, from.1)
@@ -243,7 +274,7 @@ pub fn findings(
             }
             None if row.version.eq_ignore_ascii_case("n/a") => {}
             None => found.problems.push(format!(
-                "{RELEASES_PATH}: {} has the version \"{}\", which is not vMAJOR.MINOR, a range or n/a",
+                "{BRIEF_PATH}: {} has the version \"{}\", which is not vMAJOR.MINOR, a range or n/a",
                 row.id, row.version
             )),
         }
@@ -256,7 +287,7 @@ pub fn findings(
             distinct.insert(id.clone());
             if !headings.contains(&id) {
                 found.problems.push(format!(
-                    "{RELEASES_PATH}: {} waits on {id}, which has no heading in {GATES_PATH}",
+                    "{BRIEF_PATH}: {} waits on {id}, which has no heading in {GATES_PATH}",
                     row.id
                 ));
             }
@@ -294,14 +325,14 @@ pub fn findings(
     found
 }
 
-/// The sentence in releases.md section 6.8 that introduces the list of Tier 1-core events.
+/// The sentence in SUL-BRIEF.md section 6.8 that introduces the list of Tier 1-core events.
 const TIER1_CORE_SENTENCE: &str = "Tier 1-core events are";
 
-/// The Tier 1-core event ids releases.md names: the comma-separated list in the first non-blank line after the sentence "The
+/// The Tier 1-core event ids SUL-BRIEF.md names: the comma-separated list in the first non-blank line after the sentence "The
 /// 21 Tier 1-core events are ...". Empty when the sentence or the list is missing, so a renamed section is a problem and not
 /// a pass. A Markdown escape (`\_`) and the full stop that ends the list are removed.
-pub fn tier1_core_ids(releases: &str) -> Vec<String> {
-    let mut lines = releases.lines();
+pub fn tier1_core_ids(brief: &str) -> Vec<String> {
+    let mut lines = brief.lines();
     if !lines.any(|line| line.contains(TIER1_CORE_SENTENCE)) {
         return Vec::new();
     }
@@ -314,13 +345,13 @@ pub fn tier1_core_ids(releases: &str) -> Vec<String> {
         .collect()
 }
 
-/// Problems between the Tier 1-core list in releases.md (`spec`) and the events in `sul-ipc-types` (`code`): an id on only
+/// Problems between the Tier 1-core list in SUL-BRIEF.md (`spec`) and the events in `sul-ipc-types` (`code`): an id on only
 /// one side, an id listed twice, or the same ids in a different order (the order is part of the contract: `Tier1Event::ALL`
-/// follows releases.md).
+/// follows the brief).
 pub fn tier1_problems(spec: &[String], code: &[&str]) -> Vec<String> {
     if spec.is_empty() {
         return vec![format!(
-            "{RELEASES_PATH}: no Tier 1-core event list found (looked for a line containing \"{TIER1_CORE_SENTENCE}\" and a comma-separated list after it)"
+            "{BRIEF_PATH}: no Tier 1-core event list found (looked for a line containing \"{TIER1_CORE_SENTENCE}\" and a comma-separated list after it)"
         )];
     }
     let mut problems = Vec::new();
@@ -328,27 +359,27 @@ pub fn tier1_problems(spec: &[String], code: &[&str]) -> Vec<String> {
     for id in spec {
         if !seen.insert(id.as_str()) {
             problems.push(format!(
-                "{RELEASES_PATH}: the Tier 1-core event \"{id}\" is listed twice"
+                "{BRIEF_PATH}: the Tier 1-core event \"{id}\" is listed twice"
             ));
         }
     }
     for id in spec {
         if !code.contains(&id.as_str()) {
             problems.push(format!(
-                "{RELEASES_PATH} lists the Tier 1-core event \"{id}\" but sul-ipc-types::Tier1Event has no such event"
+                "{BRIEF_PATH} lists the Tier 1-core event \"{id}\" but sul-ipc-types::Tier1Event has no such event"
             ));
         }
     }
     for id in code {
         if !spec.iter().any(|s| s == id) {
             problems.push(format!(
-                "sul-ipc-types::Tier1Event has the event \"{id}\" but the Tier 1-core list in {RELEASES_PATH} does not"
+                "sul-ipc-types::Tier1Event has the event \"{id}\" but the Tier 1-core list in {BRIEF_PATH} does not"
             ));
         }
     }
     if problems.is_empty() && spec.iter().map(String::as_str).ne(code.iter().copied()) {
         problems.push(format!(
-            "sul-ipc-types::Tier1Event::ALL lists the Tier 1-core events in a different order from {RELEASES_PATH}"
+            "sul-ipc-types::Tier1Event::ALL lists the Tier 1-core events in a different order from {BRIEF_PATH}"
         ));
     }
     problems
@@ -358,11 +389,11 @@ pub fn tier1_problems(spec: &[String], code: &[&str]) -> Vec<String> {
 pub fn check(release: &str) -> Result<()> {
     let root = Path::new(".");
     ensure_repository_root(root)?;
-    let releases = read_text(root, RELEASES_PATH);
+    let brief = read_text(root, BRIEF_PATH);
     let gates = read_text(root, GATES_PATH);
     let version = read_text(root, "Cargo.toml").and_then(|raw| workspace::workspace_version(&raw));
     let mut found = findings(
-        releases.as_deref(),
+        brief.as_deref(),
         gates.as_deref(),
         version.as_deref(),
         release,
@@ -371,13 +402,13 @@ pub fn check(release: &str) -> Result<()> {
         .iter()
         .map(|event| event.id())
         .collect();
-    if let Some(text) = releases.as_deref() {
+    if let Some(text) = brief.as_deref() {
         found
             .problems
             .extend(tier1_problems(&tier1_core_ids(text), &code_ids));
     }
     println!(
-        "[xtask] release-ladder: NOT checked: [release.R<n>] and [reference_config.R<n>] blocks (releases.md describes them but holds none), component-to-crate resolution, the superset invariant, the Tier 1 events added by R1 to R3 (releases.md holds no per-release lists), the R0 build order's crates, whether a gate has passed (gates.md records criteria, not results)"
+        "[xtask] release-ladder: NOT checked: [release.R<n>] and [reference_config.R<n>] blocks (the release plan, SUL-LEDGER/releases.md, is a placeholder: D-150), component-to-crate resolution, the superset invariant, the Tier 1 events added by R1 to R3 (no per-release lists exist), the R0 build order's crates, whether a gate has passed (gates.md records criteria, not results)"
     );
     finish("release-ladder", &found.problems, || {
         format!(
@@ -511,6 +542,45 @@ mod tests {
         assert!(
             gate_ids("BA.5 and xA.7").is_empty(),
             "an id must start a word"
+        );
+    }
+
+    #[test]
+    fn a_gate_id_in_a_note_is_not_a_prerequisite() {
+        // The brief's R1 row: the three ids in the note are not prerequisites, and "A.2" is a bucket, not a gate.
+        let cell = "A.90, A.119–A.121, plus per-emulator A.74 (A.63-Thinking and A.63-Router are A.2 gated shipping components for R1)";
+        assert_eq!(
+            gate_ids(cell),
+            ["A.90", "A.119", "A.120", "A.121", "A.74"],
+            "text in parentheses must not be read"
+        );
+        // Ids before and after a note are both read; a nested note and an unmatched `)` do not confuse it.
+        assert_eq!(gate_ids("A.1 (a (A.2) b) A.3"), ["A.1", "A.3"]);
+        assert_eq!(gate_ids("A.1) A.3"), ["A.1", "A.3"]);
+        // The R0 and R3 rows keep every id: their notes name none.
+        assert_eq!(
+            gate_ids("A.26, A.92 (all release-blocking for R0)"),
+            ["A.26", "A.92"]
+        );
+        assert_eq!(
+            gate_ids("A.152 (prerequisite), A.136–A.137"),
+            ["A.152", "A.136", "A.137"]
+        );
+    }
+
+    #[test]
+    fn a_note_naming_gates_adds_no_prerequisites() {
+        // Read as prerequisites, the note's ids would add two to the count, and `A.63-Conversation` has no heading here.
+        let ladder = LADDER_TEXT.replace(
+            "A.18\n",
+            "A.18 (A.63-Conversation is an A.2 gated shipping component for R2)\n",
+        );
+        let gates = format!("{GATES_TEXT}A.2 · Some research gate\n");
+        let found = findings(Some(&ladder), Some(&gates), Some("0.1.0"), "R0");
+        assert_eq!(found.problems, Vec::<String>::new());
+        assert_eq!(
+            found.gates_checked, 13,
+            "the ids in the note were counted as prerequisites"
         );
     }
 

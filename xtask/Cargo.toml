@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-# Read by `release-check` to compare `Tier1Event::ALL` with releases.md. xtask never ships, so this adds nothing to the app.
+# Read by `release-check` to compare `Tier1Event::ALL` with the list in SUL-BRIEF.md. xtask never ships, so this adds nothing to the app.
 sul-ipc-types = { path = "../crates/sul-ipc-types" }
 clap.workspace = true
 miette.workspace = true

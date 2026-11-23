@@ -5313,7 +5313,7 @@ struct Slot {
     timestamp: u64,
     len: u32,
     _pad: [u8; 36],
-    payload: [u8; SLOT_SIZE - 128],
+    payload: [u8; SLOT_SIZE - 64],   // D-151: the header above is 64 bytes (this said SLOT_SIZE - 128)
 }
 Head and tail counters are on separate cache lines from slots. Producer claims slots via a batch CAS. Consumers advance the read head via a single atomic store. sul-ring is the primary implementation (Ch. 10 §10.2); shmem-ipc is the fallback.
 

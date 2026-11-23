@@ -21,11 +21,13 @@ pub const MAX_MESSAGE_BYTES: usize = 64 * 1024;
 /// Every slot starts on a 64-byte boundary, so slot headers never share a cache line with a neighbour.
 pub const SLOT_ALIGN: usize = 64;
 
-/// Size of the slot header: state, sequence number, timestamp and length (Ch. 7 §2.3, "Slot layout").
+/// Size of the slot header: state, sequence number, timestamp and length (Ch. 7 §2.3, "Slot layout"). One cache line.
 ///
-/// The spec's `Slot` struct lists fields that add up to 64 bytes (`_pad: [u8; 36]`) but sizes the payload as
-/// `SLOT_SIZE - 128`. Those two cannot both hold; the field list is followed here and the payload is `slot - 64`.
-/// Open question for the owner (docs/SESSION_STATE.md).
+/// The spec's `Slot` struct lists fields that add up to exactly 64 bytes (state 1 + 7 padding, seq 8, timestamp 8, len 4,
+/// `_pad: [u8; 36]`) but used to size the payload as `SLOT_SIZE - 128`, which leaves the struct 64 bytes shorter than the
+/// slot. The owner left the choice to Claude, to be the most performant option that keeps full functionality: a 128-byte
+/// header would spend a second cache line per slot on padding (half of a 256-byte slot) for nothing the spec asks for, so the
+/// header is 64 bytes, the payload is `slot - 64`, and Ch. 7 §2.3 now says so (D-151).
 pub const SLOT_HEADER_BYTES: usize = 64;
 
 /// Byte offsets of the slot header fields. Integers are little-endian.
@@ -91,14 +93,23 @@ pub enum ReleaseClass {
     R4, // research only
 }
 
-/// Deterministic failure recovery modes, A to F (SUL-LEDGER/failures.md, Ch. 1 §6.1).
+/// Deterministic failure recovery modes, A to F, as `SUL-LEDGER/failures.md` ("Mode definitions") defines them. The owner
+/// decided that the ledger wins over the one-line meanings the scaffold carried (D-152):
 ///
-/// The meaning of each letter is defined once, in `SUL-LEDGER/failures.md` ("Mode definitions") and Ch. 1 §6.1, and is
-/// deliberately not repeated here. The one-line meanings that used to sit beside each variant ("retry with backoff",
-/// "degrade", "hard refusal"...) disagreed with that definition (A is an inference timeout, B invalid structured output,
-/// C IPC channel death, D model-file corruption, E a Rust panic, F a cascading failure), and the spec's per-error
-/// tables use the letters in yet another sense. Which reading wins is an open question for the owner
-/// (docs/SESSION_STATE.md); until then these are bare letters.
+/// - A: LLM inference timeout (retry once, halve the context, retry, CPU-only retry, mark the tier degraded).
+/// - B: invalid structured output (retry three times with a stricter schema, then fall back to unstructured text).
+/// - C: IPC channel death (recreate the channel, replay the last message; three failures mean degraded).
+/// - D: model-file corruption (SHA-256 check against the signed manifest; a mismatch starts the quarantine lifecycle).
+/// - E: Rust panic in a supervised subsystem thread (capture a minidump; per-process handling; three repeats mean degraded).
+/// - F: cascading persistent failure (escalates to the Coder; bounded repair scope; no write to trust primitives).
+///
+/// A letter names a recovery procedure; it does not say what to do about one particular error. The letter for an error code
+/// is the Mode column of that code's row in `failures.md`, and code reports that letter, never one inferred from the
+/// definitions above. A startup abort, a build failure and an "informational" entry are not Modes and have no variant.
+///
+/// Known inconsistency in the ledger, not decided here (D-152): the definition of E is a panic, but none of the 24 Mode E
+/// rows has a panic as its trigger (they are refusals and session-long degradations, such as `E_UNKNOWN_ARCH`), and Ch. 1
+/// §3.4 calls E "persistent".
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[rkyv(compare(PartialEq), derive(Debug))]
 pub enum FailureMode {
@@ -111,8 +122,9 @@ pub enum FailureMode {
 }
 
 /// The 21 Tier 1-core events: safety-relevant changes that always need an OS-level approval modal, whatever the release
-/// (Ch. 1 §6.8, `SUL-LEDGER/releases.md`). The string forms are stored in `tier1-approvals.json`, so they must never
-/// change; `cargo xtask release-check` compares [`Tier1Event::ALL`] with the list in `releases.md`.
+/// (`SUL-BRIEF.md` §6.8). The string forms are stored in `tier1-approvals.json`, so they must never change;
+/// `cargo xtask release-check` compares [`Tier1Event::ALL`] with the list in `SUL-BRIEF.md` (D-150: the release plan that
+/// is meant to hold the list, `SUL-LEDGER/releases.md`, is not written yet).
 ///
 /// Events that are Tier 1 only by release class (R1 to R3) are not listed here: [`IpcMessage::Tier1Event`] carries the
 /// event as a string so it can carry those too.
@@ -143,7 +155,7 @@ pub enum Tier1Event {
 }
 
 impl Tier1Event {
-    /// Every Tier 1-core event, in the order `releases.md` lists them.
+    /// Every Tier 1-core event, in the order `SUL-BRIEF.md` §6.8 lists them.
     pub const ALL: [Tier1Event; 21] = [
         Self::VaultDisableAuthFactor,
         Self::VaultDisableAntiDebug,
@@ -168,7 +180,7 @@ impl Tier1Event {
         Self::RefusalVoiceCloneAttempt,
     ];
 
-    /// The event's stable identifier, as written in `releases.md` and in the approvals file.
+    /// The event's stable identifier, as written in `SUL-BRIEF.md` §6.8 and in the approvals file.
     pub const fn id(self) -> &'static str {
         match self {
             Self::VaultDisableAuthFactor => "vault:disable_auth_factor",
@@ -317,7 +329,7 @@ mod tests {
     use core::mem::{align_of, offset_of, size_of};
     use std::collections::HashSet;
 
-    /// The 21 ids as `releases.md` writes them. A second copy on purpose: renaming one by accident must fail a test.
+    /// The 21 ids as `SUL-BRIEF.md` §6.8 writes them. A second copy on purpose: renaming one by accident must fail a test.
     const EXPECTED_TIER1_IDS: [&str; 21] = [
         "vault:disable_auth_factor",
         "vault:disable_anti_debug",

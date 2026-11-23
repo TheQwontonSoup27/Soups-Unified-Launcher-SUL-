@@ -13,6 +13,7 @@ mod ipc;
 mod network;
 mod release;
 mod tauri;
+mod unsafe_code;
 mod workspace;
 
 use clap::{Parser, Subcommand};
@@ -34,7 +35,7 @@ enum Command {
         #[arg(long, default_value = "config.toml")]
         config: PathBuf,
     },
-    /// Structural guards from SUL-LEDGER/guards.md: workspace manifest, network surfaces, crate boundaries, Electron, Tauri capabilities, WebView runtime
+    /// Structural guards from SUL-LEDGER/guards.md (workspace manifest, network surfaces, crate boundaries, Electron, Tauri capabilities, WebView runtime) and forbid(unsafe_code) on the substrate crates (D-153)
     AcRegression,
     /// Verify zero Electron / Node.js in manifests, lockfiles, the Tauri bundle and source (guards.md, "Electron exclusion")
     ElectronAudit,
@@ -44,7 +45,7 @@ enum Command {
     WebviewRuntimeAudit,
     /// Run the golden-bytes test of sul-ipc-types: the wire format must not change without a reviewed golden-file update (Ch. 7 §2.3)
     IpcCheck,
-    /// Check the release ladder and the Tier 1-core events in SUL-LEDGER/releases.md against gates.md, the workspace version and sul-ipc-types
+    /// Check the release ladder and the Tier 1-core events in SUL-BRIEF.md against gates.md, the workspace version and sul-ipc-types
     ReleaseCheck {
         #[arg(long, default_value = "R0")]
         release: String,
@@ -92,7 +93,7 @@ fn config_toml(config: &Path) -> Result<()> {
 
 fn say_what_ac_regression_covers() {
     println!(
-        "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14), crate boundaries (HTTP client, direct wasapi and process-memory rules are written; the crate-boundaries line below says which are armed), Electron exclusion, Tauri capability audit, WebView runtime audit (Tauri and updater floors)"
+        "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14), crate boundaries (HTTP client, direct wasapi and process-memory rules are written; the crate-boundaries line below says which are armed), Electron exclusion, Tauri capability audit, WebView runtime audit (Tauri and updater floors), and, not a ledger guard, #![forbid(unsafe_code)] on the five substrate crates (D-153)"
     );
     println!(
         "[xtask] ac-regression: NOT implemented yet: structural refusals (voice-clone, kernel-AC frame-gen and hook refusals: the crates and the shipped config.toml they guard do not exist), guards on a module or call order inside a crate (need syntax analysis), feature orthogonality and the [webview] config guards (need config.toml), the WebView2 runtime floor. No rule for \"Windows-only IPC\" was found in Ch. 1."
@@ -115,6 +116,7 @@ fn main() -> Result<()> {
                 ("workspace-manifest", &workspace::check),
                 ("network-surfaces", &network::check),
                 ("crate-boundaries", &boundaries::check),
+                ("unsafe-code", &unsafe_code::check),
                 ("electron-audit", &electron::check),
                 ("tauri-capability-audit", &tauri::check_capabilities),
                 ("webview-runtime-audit", &tauri::check_runtime),
@@ -152,6 +154,7 @@ fn main() -> Result<()> {
                 ("config-toml", &|| config_toml(Path::new("config.toml"))),
                 ("network-surfaces", &network::check),
                 ("crate-boundaries", &boundaries::check),
+                ("unsafe-code", &unsafe_code::check),
                 ("electron-audit", &electron::check),
                 ("tauri-capability-audit", &tauri::check_capabilities),
                 ("webview-runtime-audit", &tauri::check_runtime),
