@@ -67,6 +67,8 @@ blake3 = { version = "1.6.1", features = ["rayon"] }
 zstd = "0.13.2"
 ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 chacha20poly1305 = "0.10.1"
+# Wipes key material when it is dropped (the quarantine's per-file keys, D-155).
+zeroize = "1"
 # Kept from the V5.1 build (used by sul-core)
 sha2 = "0.10"
 hex = "0.4"

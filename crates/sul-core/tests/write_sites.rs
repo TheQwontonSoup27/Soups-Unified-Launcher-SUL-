@@ -218,6 +218,11 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
         "sets an unreadable library file aside under a new name instead of deleting it",
     ),
     (
+        "crates/sul-quarantine/src/keys.rs",
+        &["delete a file", "open a file or pipe with options"],
+        "the default key source (D-155): writes the 32-byte key of one quarantined item to `key.bin` in that item's own folder (created with create-new, so it never replaces a key) and removes that one file when the item is restored or never finished; it touches nothing else, and `seal.rs`, which makes and opens the sealed bytes, touches no file at all",
+    ),
+    (
         "crates/sul-quarantine/src/quarantine.rs",
         &[
             "create a folder",
@@ -225,7 +230,7 @@ const WRITE_SITES: &[(&str, &[&str], &str)] = &[
             "delete a folder",
             "open a file or pipe with options",
         ],
-        "the quarantine: a verified copy into its own folder (created with create-new, so it never overwrites), the original removed only after the copy is proven, a restore that never overwrites; the folder removal is only for a copy that did not finish; no purge",
+        "the quarantine: a sealed copy into its own folder (created with create-new, so it never overwrites, and a half-written copy that this call made is taken away again), the original removed only after the copy is proven by opening it, a restore that never overwrites; the folder removal is only for a copy that did not finish; no purge",
     ),
     (
         "src-tauri/src/ipc_tests.rs",
@@ -250,6 +255,8 @@ fn the_scan_covers_the_source_it_is_meant_to() {
     for must in [
         "crates/sul-core/src/fsops.rs",
         "crates/sul-quarantine/src/quarantine.rs",
+        "crates/sul-quarantine/src/keys.rs",
+        "crates/sul-quarantine/src/seal.rs",
         "src-tauri/src/lib.rs",
         "crates/sul-core/src/logging.rs",
         // One file from each of the other crates the old `sul-core` was split into.
@@ -439,7 +446,8 @@ fn every_write_site_says_why() {
 #[test]
 fn only_the_quarantine_and_the_copys_own_temp_file_are_ever_deleted() {
     // Deletion is the dangerous operation. The quarantine may do it, and only after a verified copy (its own tests
-    // and its guard test list the exact four places). The safe file copy in `fsops.rs` may remove the temp file that
+    // and its guard test list the exact five places). Its key source, `keys.rs`, may remove the one `key.bin` of an item
+    // (its own guard test lists the single call). The safe file copy in `fsops.rs` may remove the temp file that
     // it made itself and nothing else (the next test checks every call). No other file may delete anything.
     for (name, text) in sources() {
         let kinds = kinds_in(&production(&name, &text));
@@ -447,6 +455,7 @@ fn only_the_quarantine_and_the_copys_own_temp_file_are_ever_deleted() {
         assert!(
             !deletes
                 || name == "crates/sul-quarantine/src/quarantine.rs"
+                || name == "crates/sul-quarantine/src/keys.rs"
                 || name == "crates/sul-core/src/fsops.rs",
             "{name} deletes"
         );
