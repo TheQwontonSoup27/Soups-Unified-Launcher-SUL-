@@ -8,9 +8,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The links the owner sent (eight on 2026-11-05, ten on 2026-11-09). Each must stay in the list with its status and a
-/// plain description of what it is and does.
-const OWNER_LINKS: [&str; 18] = [
+/// The links the owner sent (eight on 2026-11-05, ten on 2026-11-09, one on 2026-11-24). Each must stay in the list with
+/// its status and a plain description of what it is and does.
+const OWNER_LINKS: [&str; 19] = [
     "https://github.com/morluto/rea",
     "https://github.com/Zagitta/gpu-unlock",
     "https://github.com/Raphire/Win11Debloat",
@@ -29,6 +29,7 @@ const OWNER_LINKS: [&str; 18] = [
     "https://github.com/n8n-io",
     "https://github.com/calendly",
     "https://gist.github.com/aamiaa/204cd9d42013ded9faf646fae7f89fbb",
+    "https://nosignups.net",
 ];
 
 /// Addresses that are made-up examples or local development addresses. They are described in section 8 of the list and
