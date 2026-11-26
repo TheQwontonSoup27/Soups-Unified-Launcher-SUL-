@@ -1,6 +1,6 @@
 # 0013 — nosignups.net, web lookup, a daily digest, an AI-only archive and a notation for the AI: proposals
 
-Status: **proposal only. Nothing here is adopted, no code was written and no spec text was changed.** It waits for the owner's answers (section 8). Written 2026-11-25 on branch `rebuild/r0-bootstrap`. No decision number (D-156 onward) is taken until the owner answers.
+Status: **proposals; the owner answered the four questions of section 8 on 2026-11-25 (section 9, recorded as D-156).** No code was written and no spec text was changed. Proposals that were not asked about (P1, P3 a/d/e, P4) are still only proposals. Written 2026-11-25 on branch `rebuild/r0-bootstrap`.
 
 In plain words: the owner asked (2026-11-24, again 2026-11-25) for four things. (1) Use nosignups.net and the projects it lists to improve SUL, without cancelling planned features. (2) See whether the directory's web tools could help the Combat AI look things up online with fewer tokens and faster. (3) Compile the internet's data every day into a packet for Jarvis, and build a "Wayback Machine" of our own in a form only an AI reads. (4) Create a language made for the AI to read. This record says what I found, what the spec already contains (so nothing is built twice), six proposals that fit the rules and each other, what cannot be done as asked and why, and the questions I need answered. Each proposal can be accepted or dropped on its own.
 
@@ -163,6 +163,19 @@ Between proposals: P1 feeds P2 (measuring), P3 and P4 (counts). P4 backs P3 and 
 4. **Q4, what I build next.** Continue the R0 order (`sul-watchdog`, then `sul-crash` with P6), start with P6 and P1, or write the `.sularc` format spec first?
 
 Deferred until Q1 is answered: the exact archive container, the daily size budget, and the release placement of P3 to P5.
+
+## 9. The owner's answers (2026-11-25, recorded as D-156)
+
+The owner chose the recommended option on all four questions.
+
+| Question | Answer | What follows |
+|---|---|---|
+| Q1, the digest's scope | **Three layers**: the watch list, owner-chosen openly licensed topics, and the pages the AI looked up | P5 is planned for R2 with P4 and the hive. Nothing is built. The "whole internet every day" version stays out (5.1, 5.2). |
+| Q2, where the fetch-side savers live | **An own client in `sul-net`**, declared as a new network surface | Written from scratch in Rust when its turn comes. Its declaration (an amendment of Ch. 16 §16.15.14 and of the AST guard that limits `sul-net`'s HTTP use) is its own decision, written when the client is built. Minimum safeguards, so they are not forgotten: https only; refuse private, loopback and link-local addresses (a page must not be able to point the client at the owner's own network); a redirect limit; a size cap; a content-type allowlist; timeouts; `robots.txt` and per-host rate limits; no cookies, no credentials. Until then the spec's rule that only RustXNG makes HTTP requests for search stands. |
+| Q3, the notation | **Measured-only** | The lossless encoder and decoder come with the model profiles and the eval harness (R1). Stored packs stay JSON. |
+| Q4, what to build next | **Continue the R0 order** | `sul-watchdog` next, then `sul-crash`, where P6 (share-safe diagnostic bundles) is built. Stop and report after each. |
+
+**Still open, asked before any R2 work starts:** the archive container (a new `.sularc` kind with an index pack, as proposed, or something else), the daily size budget, the release placement of P3 to P5, and the Wikipedia text licence. P1 (exact token counts) comes up again at R0 layer 6, when the first crate that loads a model is built.
 
 ## Sources (all in `docs/references.md`, section 9 unless noted)
 

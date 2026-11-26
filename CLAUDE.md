@@ -30,7 +30,7 @@ When uploaded flat to Claude Projects (11 files total), map them to their canoni
 
 1. `README-AND-BRIEF.md` (`README.md` + `SUL-BRIEF.md`) — repo map, identity, one-product rule, release ladder, invariants, hardware envelope.
 2. **Chapter-Scoped Reading Rule (Mandatory)**: `SUL-ARCHITECTURE.md` combines `Ch. 01`–`Ch. 17` into one file. **NEVER** load the entire `SUL-ARCHITECTURE.md` into context at once—use the **Chapter Index** at lines 1–25 to read **only** the exact line range for `Ch. 01 — Core Platform` and the specific subsystem chapter you are implementing.
-3. **Ledger & Decisions Scoped Reading Rule (Mandatory)**: `SUL-LEDGER-AND-DECISIONS.md` combines all 5 `SUL-LEDGER/*.md` files and `SUL-DECISIONS.md`. **NEVER** ingest it all at once—use its **Section Index** (lines 1–14) to read **only** the exact line range for the ledger (`gates`, `baselines`, `failures`, `guards`, `releases`) or `SUL-DECISIONS.md` (`D-001`–`D-155`, append-only).
+3. **Ledger & Decisions Scoped Reading Rule (Mandatory)**: `SUL-LEDGER-AND-DECISIONS.md` combines all 5 `SUL-LEDGER/*.md` files and `SUL-DECISIONS.md`. **NEVER** ingest it all at once—use its **Section Index** (lines 1–14) to read **only** the exact line range for the ledger (`gates`, `baselines`, `failures`, `guards`, `releases`) or `SUL-DECISIONS.md` (`D-001`–`D-156`, append-only).
 
 ## Non-Negotiable Invariants
 
