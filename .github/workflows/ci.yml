@@ -21,14 +21,14 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          cargo clippy -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-quarantine -p sul-metrics -p xtask --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath clippy.log
+          cargo clippy -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-quarantine -p sul-metrics -p sul-watchdog -p xtask --all-targets --message-format=short -- -D warnings 2>&1 | Tee-Object -FilePath clippy.log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 clippy.log; exit $code }
       - name: tests
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Continue'
-          cargo test -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-quarantine -p sul-metrics -p xtask 2>&1 | Tee-Object -FilePath test.log
+          cargo test -p sul-ipc-types -p sul-ring -p sul-wire -p sul-trust -p sul-quarantine -p sul-metrics -p sul-watchdog -p xtask 2>&1 | Tee-Object -FilePath test.log
           $code = $LASTEXITCODE
           if ($code -ne 0) { ./.github/scripts/surface-failure.ps1 test.log; exit $code }
       - name: xtask gates

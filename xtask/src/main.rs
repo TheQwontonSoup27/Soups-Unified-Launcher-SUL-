@@ -93,7 +93,7 @@ fn config_toml(config: &Path) -> Result<()> {
 
 fn say_what_ac_regression_covers() {
     println!(
-        "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14), crate boundaries (HTTP client, direct wasapi and process-memory rules are written; the crate-boundaries line below says which are armed), Electron exclusion, Tauri capability audit, WebView runtime audit (Tauri and updater floors), and, not a ledger guard, #![forbid(unsafe_code)] on the six substrate crates (D-153, D-154)"
+        "[xtask] ac-regression: implemented guards: workspace manifest, network surfaces (Ch. 16 §16.15.14), crate boundaries (HTTP client, direct wasapi and process-memory rules are written; the crate-boundaries line below says which are armed), Electron exclusion, Tauri capability audit, WebView runtime audit (Tauri and updater floors), and, not a ledger guard, #![forbid(unsafe_code)] on the substrate crates listed in xtask/src/unsafe_code.rs (D-153, D-154, D-157)"
     );
     println!(
         "[xtask] ac-regression: NOT implemented yet: structural refusals (voice-clone, kernel-AC frame-gen and hook refusals: the crates and the shipped config.toml they guard do not exist), guards on a module or call order inside a crate (need syntax analysis), feature orthogonality and the [webview] config guards (need config.toml), the WebView2 runtime floor. No rule for \"Windows-only IPC\" was found in Ch. 1."

@@ -19,7 +19,9 @@ use crate::common::{ensure_repository_root, finish, read_text};
 use miette::Result;
 use std::path::Path;
 
-/// The crates that must keep `#![forbid(unsafe_code)]`: `(package, crate root)`. The six substrate crates that have it today.
+/// The crates that must keep `#![forbid(unsafe_code)]`: `(package, crate root)`. The seven substrate crates that have it today
+/// (`sul-watchdog` joined with D-157; its live-process probe and thread priority need Win32 calls, which will live in a separate
+/// crate rather than lift the attribute here).
 pub const FORBID_UNSAFE: &[(&str, &str)] = &[
     ("sul-ipc-types", "crates/sul-ipc-types/src/lib.rs"),
     ("sul-ring", "crates/sul-ring/src/lib.rs"),
@@ -27,6 +29,7 @@ pub const FORBID_UNSAFE: &[(&str, &str)] = &[
     ("sul-trust", "crates/sul-trust/src/lib.rs"),
     ("sul-quarantine", "crates/sul-quarantine/src/lib.rs"),
     ("sul-metrics", "crates/sul-metrics/src/lib.rs"),
+    ("sul-watchdog", "crates/sul-watchdog/src/lib.rs"),
 ];
 
 /// The inner attributes (`#![...]`) in the run of whitespace, comments and inner attributes at the top of a Rust file, each
@@ -276,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn the_real_list_names_the_six_substrate_crates() {
+    fn the_real_list_names_the_seven_substrate_crates() {
         let names: Vec<&str> = FORBID_UNSAFE.iter().map(|(package, _)| *package).collect();
         assert_eq!(
             names,
@@ -286,7 +289,8 @@ mod tests {
                 "sul-wire",
                 "sul-trust",
                 "sul-quarantine",
-                "sul-metrics"
+                "sul-metrics",
+                "sul-watchdog"
             ]
         );
         for (package, path) in FORBID_UNSAFE {

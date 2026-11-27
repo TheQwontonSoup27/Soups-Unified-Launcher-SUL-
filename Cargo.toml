@@ -10,6 +10,7 @@ members = [
     "crates/sul-trust",
     "crates/sul-quarantine",
     "crates/sul-metrics",
+    "crates/sul-watchdog",
     "xtask",
     # Carried over from the V5.1 build and being merged into the layout above (docs/SESSION_STATE.md)
     "crates/sul-core",
@@ -72,6 +73,9 @@ zeroize = "1"
 # Kept from the V5.1 build (used by sul-core)
 sha2 = "0.10"
 hex = "0.4"
+# Filesystem change events for `sul-watchdog` (D-157). On the Windows target it brings only `windows-sys`, `walkdir` and small helpers
+# (no `mio`, no sockets), so the network guard passes it; the default feature is the macOS backend, which this product does not need.
+notify = { version = "9.0.0", default-features = false }
 
 # Storage & memory mapping
 rusqlite = { version = "0.33.0", features = ["bundled"] }
@@ -100,6 +104,7 @@ windows = { version = "0.59.0", features = [
 sul-core = { path = "crates/sul-core" }
 sul-trust = { path = "crates/sul-trust" }
 sul-quarantine = { path = "crates/sul-quarantine" }
+sul-watchdog = { path = "crates/sul-watchdog" }
 sul-launcher = { path = "crates/sul-launcher" }
 sul-builds = { path = "crates/sul-builds" }
 sul-mod = { path = "crates/sul-mod" }

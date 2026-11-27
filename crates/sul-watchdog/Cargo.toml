@@ -1,0 +1,28 @@
+[package]
+name = "sul-watchdog"
+description = "The integrity watchdog of Soups Unified Launcher: a signed baseline of the files SUL trusts, an event-driven guard that notices a change within a second, analysis of a process snapshot for injected memory, hooks and foreign threads, and a hash-chained threat log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sul-core.workspace = true
+# `manifest::hash_file` (the SHA-256 every check uses), the shared `Finding` words and `verify_ed25519` (D-157).
+sul-trust.workspace = true
+# `FailureMode`: the one definition of the recovery letters (D-152).
+sul-ipc-types = { path = "../sul-ipc-types" }
+serde.workspace = true
+serde_json.workspace = true
+# Chaining the threat log: each line carries the SHA-256 of the line before it.
+sha2.workspace = true
+hex.workspace = true
+# Filesystem change events (ReadDirectoryChangesW on Windows). Safe Rust: this crate keeps `#![forbid(unsafe_code)]`.
+notify.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+# Tests only: they sign a baseline with a throwaway key. The production code never signs; it checks through `sul-trust`.
+ed25519-dalek.workspace = true
