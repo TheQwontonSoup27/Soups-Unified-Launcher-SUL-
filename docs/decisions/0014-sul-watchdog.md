@@ -1,6 +1,6 @@
 # 0014 — `sul-watchdog`: the integrity watchdog's logic (R0 layer 3, cut 3)
 
-Status: **built and verified in the Linux container on 2026-11-26 on branch `rebuild/r0-bootstrap`; not merged into `main`; Windows CI result pending.** About 3,700 lines of it were written in an earlier session that stopped before anything was run or recorded (the tree had one test that did not compile and one stale test). This session fixed those, found the gaps listed in section 5 with deliberate-bug checks, closed them, wrote this record and the D-157 entry, and wired the crate into the xtask guard and CI. It is the third cut of R0 layer 3 and the first step of the owner's answer of 2026-11-25 (D-156, question 4: "`sul-watchdog`, then `sul-crash`; stop and report after each").
+Status: **built and verified in the Linux container on 2026-11-26 on branch `rebuild/r0-bootstrap`; not merged into `main`; Windows CI green (commit `b02d00e`, run 45942630461, read 2026-11-27).** About 3,700 lines of it were written in an earlier session that stopped before anything was run or recorded (the tree had one test that did not compile and one stale test). This session fixed those, found the gaps listed in section 5 with deliberate-bug checks, closed them, wrote this record and the D-157 entry, and wired the crate into the xtask guard and CI. It is the third cut of R0 layer 3 and the first step of the owner's answer of 2026-11-25 (D-156, question 4: "`sul-watchdog`, then `sul-crash`; stop and report after each").
 
 In plain words: SUL now has the *logic* of the watchdog and a real file-change watcher, and nothing that touches a live Windows process yet. It can (1) record a fingerprint of every file SUL trusts and check a baseline's signature before believing it, (2) notice within a second that a guarded file was written, replaced by a link, deleted or planted, (3) look at a snapshot of SUL's own process and report memory that is readable, writable and executable, hooked function starts, foreign threads and replaced images, with a list the person controls for things like antivirus, and (4) write everything it finds to a log that notices if a line is edited, removed or reordered, and that holds no file path and no free text. It only reports. Acting on a report (quarantining, turning a feature off, telling the person) is left to the caller, which is the only one that knows what is in use. **Green tests here mean the logic is right for the inputs it was given, not that SUL is protected**: the part that reads a real process, and the thread that runs the watchdog at low priority, are the next cut.
 
@@ -22,7 +22,7 @@ In plain words: SUL now has the *logic* of the watchdog and a real file-change w
 - **Read a live process, or set `BELOW_NORMAL`, or run on its own thread.** `ProcessProbe` has no real implementation, so the scan has only ever seen made-up snapshots. Nothing sets the watchdog's priority (Ch. 13 and the guards ask for `BELOW_NORMAL`).
 - **Decide what the installed product guards, or sign a baseline.** The installer's layout is not fixed and no installer exists; `Baseline::compute` exists and no caller does. Who signs, and where the public key is embedded, belongs to the installer and update chain.
 - **Stop someone who can write the log file** from cutting off its end or replacing it whole with a freshly chained copy. The chain makes an edit, a deletion or a reorder inside the log visible; nothing outside the file remembers the last line. An anchor (the hive-mind's copy, or a signed checkpoint) is not built. `sul-hive-mind` does not exist; `ThreatSink` is where it will plug in.
-- **Prove the tests pass on Windows.** The container is Linux. The real watcher ran here on `inotify`; on Windows it is `ReadDirectoryChangesW`, which has not been run, and the "within one second" test (`the_real_watcher_reports_a_write_to_a_guarded_file_within_a_second`) is the first thing to read in the Windows CI result.
+- **Prove the links and the real process behave on Windows.** The container is Linux. The Windows runner (run 45942630461) passed 82 of 82 tests, including the real watcher on `ReadDirectoryChangesW` within one second (`the_real_watcher_reports_a_write_to_a_guarded_file_within_a_second`). But the two tests that plant a link are `cfg(unix)` and a third skips its link step, so "a link is never followed" has only been exercised on Linux; junctions, file locks and a real process have not been exercised anywhere.
 - **Take the 25% hollowing threshold (`HOLLOW_PERCENT`) from any measurement.** It is a named starting value.
 
 ## 3. Spec mapping
@@ -30,7 +30,7 @@ In plain words: SUL now has the *logic* of the watchdog and a real file-change w
 | Spec text | Where | State |
 |---|---|---|
 | Ch. 12 §2.8 / Ch. 14 §14.13.2 "async OS filesystem hooks monitor binaries, sidecars, manifests against trusted baselines. Baseline computed at install time." | `baseline`, `guard`, `monitor` | logic built; "at install time" waits for an installer |
-| §2.8 test: "filesystem hooks detect a modified binary within 1 s of write" | `monitor::tests::the_real_watcher_…_within_a_second` | passes on Linux; Windows pending |
+| §2.8 test: "filesystem hooks detect a modified binary within 1 s of write" | `monitor::tests::the_real_watcher_…_within_a_second` | passes on Linux and on the Windows runner (run 45942630461) |
 | Ch. 14 §14.13.3 process tamper: RWX not mapped by SUL, API hooks, foreign threads, DLL hollowing; user-visible AV/EDR allowlist | `scan` (`analyze`, `Allowlist`) | logic built, tested on made-up snapshots; no live probe |
 | §2.8 / Ch. 14 §14.14.1: model files verified "on every session start, not just first load" | `Watchdog::session_start`; `Role::ModelFile` is skipped by the periodic pass only | built |
 | §14.13.5 hive-mind threat logging, privacy: "hashes, detection reasons, event types — never user file contents, never user paths" | `incident::ThreatRecord`, `threat_log` | built; the hive-mind end does not exist |
@@ -78,7 +78,9 @@ The equivalent mutant: removing the explicit `is_symlink` check in `guard::walk_
 
 Also found and fixed before any of the above: a test in `monitor.rs` that did not compile (a variable renamed halfway), a stale test in `guard.rs` that expected the answer from before `walk_chain` existed (a plain file where a folder should be is `NotAFile`, confirmed, not `Unreadable`, suspicious; the module's own documentation says so), and `Watchdog` itself, the glue that decides what reaches the log and what reaches the caller, had **no tests at all** (9 added).
 
-**Not run:** Windows CI for this commit (pending until read); Miri and Kani (not installed here); anything that touches a real Windows process, a real junction, a real file lock or `ReadDirectoryChangesW`.
+**Windows CI (read 2026-11-27, run 45942630461, all four jobs success):** 82 `sul-watchdog` tests passed on Windows (84 here; two `cfg(unix)` link tests do not run there), including the real-watcher test on `ReadDirectoryChangesW`; clippy `-D warnings` and the xtask gates passed.
+
+**Not run:** Miri and Kani (not installed here); anything that touches a real Windows process, a real junction or symlink, or a real file lock.
 
 ## 6. Open points, and what the next cut needs
 
