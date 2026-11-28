@@ -9256,7 +9256,7 @@ Release: R0 (ships as part of the R0 substrate).
 2.8 Watchdog and process monitoring
 Active File System Integrity Guard (sul-watchdog): Async OS filesystem hooks monitor binaries, sidecars, manifests against trusted baselines. Baseline computed at install time.
 
-Process tamper detection: Scan SUL's own process for RWX regions not mapped by SUL, API hooks in SUL's address space, foreign threads, DLL hollowing. Enables safe minhook opt-in on single-player (Ch. 7 §2.1). User-visible AV/EDR allowlist.
+Process tamper detection: Scan SUL's own process for RWX regions not mapped by SUL, API hooks in SUL's address space, foreign threads, DLL hollowing. Enables safe minhook opt-in on single-player (Ch. 7 §2.1). User-visible AV/EDR allowlist. Live-code attestation (D-159): code SUL creates at run time (hot updates, locally built mods, JIT code, hook trampolines) is signed as live code and the watchdog re-verifies it, instead of skipping it or flagging it.
 
 References in R.13: pandaadir05/ghost (injection/RWX/hook detection), memf-windows (process hollowing detection), wraith-rs (Windows PEB/TEB manipulation), psmux/pstop (htop for Windows). leviathan-driver reference for kernel-mode monitoring (R.13) — understanding, not building (Ch. 16 §16.5). 0xor0ne/debugoff reference for hardening patterns.
 
@@ -9278,6 +9278,10 @@ Code	Category	Trigger	Recovery
 E_WATCHDOG_TAMPER	Watchdog tamper	Trust primitive file modified	Mode D quarantine lifecycle; hive threat log
 E_WATCHDOG_HOOK_DETECTED	Hook detected	API hook in SUL's address space	Log, notify, optional auto-disable flip-model
 E_WATCHDOG_RWX_REGION	RWX region detected	RWX region not mapped by SUL	Log, notify
+E_WATCHDOG_FOREIGN_THREAD	Foreign thread detected	Thread in SUL's process starts outside every module loaded at the known-good point	Log, notify
+E_WATCHDOG_IMAGE_HOLLOWING	Image hollowing detected	Loaded image's code replaced rather than patched	Log, notify
+E_WATCHDOG_LIVE_CODE_MODIFIED	Live code modified	Signed live code no longer matches its record	Log, notify; the caller unloads the feature that owns the code
+E_WATCHDOG_LIVE_CODE_REFUSED	Live-code record refused	Live-code record failed a signature, authority, order, producer or content check	Log, notify; nothing is registered
 Failure-injection support: none specific.
 
 Release: R0 (ships as part of the R0 substrate).
@@ -10323,6 +10327,8 @@ Foreign threads.
 
 DLL hollowing.
 
+Signed live code (D-159): attested code that no longer matches its record, and records that fail the signature, authority, order, producer or content checks.
+
 Enables safe minhook opt-in on single-player (Ch. 7 §2.1). User-visible AV/EDR allowlist. leviathan-driver reference for kernel-mode monitoring (R.13, understanding not building — Ch. 16 §16.5); 0xor0ne/debugoff reference for hardening patterns.
 
 §14.13.4 Threat quarantine isolation: copy → verify → record → verify → remove into encrypted quarantine. Immutable audit. sul-quarantine restore <id> with confirmation modal.
@@ -10331,7 +10337,7 @@ Enables safe minhook opt-in on single-player (Ch. 7 §2.1). User-visible AV/EDR 
 
 VaultDecoyAccessed, VaultTamperDetected.
 
-E_WATCHDOG_TAMPER, E_WATCHDOG_HOOK_DETECTED, E_WATCHDOG_RWX_REGION.
+E_WATCHDOG_TAMPER, E_WATCHDOG_HOOK_DETECTED, E_WATCHDOG_RWX_REGION, E_WATCHDOG_FOREIGN_THREAD, E_WATCHDOG_IMAGE_HOLLOWING, E_WATCHDOG_LIVE_CODE_MODIFIED, E_WATCHDOG_LIVE_CODE_REFUSED.
 
 Every quarantined file with its hash and source.
 

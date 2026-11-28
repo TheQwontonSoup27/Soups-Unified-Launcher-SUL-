@@ -12,16 +12,22 @@
 //! Kani and Miri. Filling a snapshot from a live Windows process (`VirtualQuery`, a toolhelp snapshot, reading the module
 //! files) is the job of a [`ProcessProbe`], which is the next cut (decision 0014); nothing implements it yet.
 //!
+//! **Live code (D-159).** Memory SUL generates on purpose (a hook trampoline, generated code) is not skipped on SUL's word.
+//! It is registered with a signed record ([`crate::live_code`]) and each scan the probe digests exactly those ranges: a range
+//! whose bytes are still what was signed is accounted for (an RWX region inside it is listed as allowed, with the record
+//! that allows it; a thread may start in it); a range whose bytes changed, or that cannot be read, is a finding of its own.
+//!
 //! Every finding here is **suspicious**, never confirmed: these are heuristics about a running process, and an antivirus
 //! product, an overlay or a debugger legitimately does all four. The user-visible [`Allowlist`] is how a person says "this
 //! one is expected"; allowed findings are still returned (in [`ScanReport::allowed`]) so the screen can show what was
 //! allowed and why, and the log can say so. Assumes 64-bit code: the patch shapes are the x64 and x86 detours MinHook and
 //! its relatives write.
 //!
-//! The spec lists four detections and three error codes (`E_WATCHDOG_TAMPER`, `E_WATCHDOG_HOOK_DETECTED`,
-//! `E_WATCHDOG_RWX_REGION`). Hooks and RWX regions have theirs; foreign threads and hollowing have none (decision 0014).
+//! Every detection has a ledger code (`code`): the spec named three and the owner asked for the best choice on security, so the
+//! other two process detections and the live-code one have theirs too (D-158, D-159).
 
 use crate::code::WatchdogCode;
+use crate::live_code::AttestedRegion;
 use serde::Serialize;
 use sul_core::Result;
 use sul_trust::findings::Certainty;
@@ -113,25 +119,39 @@ pub struct SectionDiff {
     pub changed_bytes: u64,
 }
 
+/// The digest the probe computed for one range it was asked to digest (a registered piece of live code).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LiveDigest {
+    pub base: u64,
+    pub size: u64,
+    /// The BLAKE3-256 of the `size` bytes at `base`, or `None` if any of them could not be read.
+    pub blake3: Option<[u8; 32]>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Snapshot {
     pub regions: Vec<Region>,
     pub threads: Vec<Thread>,
     pub prologues: Vec<Prologue>,
     pub sections: Vec<SectionDiff>,
+    /// One entry per range the probe was asked to digest.
+    pub live: Vec<LiveDigest>,
 }
 
 /// Something that can look at the live process. Implemented by the Windows adapter (decision 0014); the analysis does not
 /// care how a snapshot was taken.
 pub trait ProcessProbe {
-    fn snapshot(&mut self) -> Result<Snapshot>;
+    /// Look at the process. `digest_ranges` are the `(base, size)` ranges of registered live code: put one
+    /// [`LiveDigest`] in [`Snapshot::live`] for each, hashing the memory in place.
+    fn snapshot(&mut self, digest_ranges: &[(u64, u64)]) -> Result<Snapshot>;
 }
 
 /// What SUL itself did, so that it is not reported against it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Expectations {
-    /// Memory SUL allocated as RWX on purpose (the trampolines of the MinHook opt-in, Ch. 7 §2.1): `(base, size)`.
-    pub own_rwx: Vec<(u64, u64)>,
+    /// Live code that was registered with a signed record (the trampolines of the MinHook opt-in, Ch. 7 §2.1, generated
+    /// code): not skipped, **verified** each scan against the digest that was signed (D-159).
+    pub attested: Vec<AttestedRegion>,
     /// Hooks SUL installed itself: `(module file name, function)`.
     pub own_hooks: Vec<(String, String)>,
     /// File names of the modules loaded at the known-good point (after start-up, before anything else could be injected).
@@ -139,12 +159,6 @@ pub struct Expectations {
 }
 
 impl Expectations {
-    fn covers(&self, region: &Region) -> bool {
-        self.own_rwx
-            .iter()
-            .any(|&(base, size)| region.base >= base && region.end() <= base.saturating_add(size))
-    }
-
     fn is_known_module(&self, name: &str) -> bool {
         self.known_modules.iter().any(|m| same_name(m, name))
     }
@@ -174,7 +188,7 @@ fn file_name(text: &str) -> &str {
     text.rsplit(['/', '\\']).next().unwrap_or(text)
 }
 
-fn same_name(a: &str, b: &str) -> bool {
+pub(crate) fn same_name(a: &str, b: &str) -> bool {
     file_name(a).eq_ignore_ascii_case(file_name(b))
 }
 
@@ -217,15 +231,19 @@ pub enum ScanKind {
     InlineHook,
     ForeignThread,
     ImageHollowing,
+    /// Registered live code whose bytes are no longer what was signed, or that cannot be read where it was registered.
+    LiveCodeModified,
 }
 
 impl ScanKind {
-    /// The ledger code for this kind of detection, when it has one (see the module documentation).
-    pub const fn code(self) -> Option<WatchdogCode> {
+    /// The ledger code for this kind of detection (see the module documentation).
+    pub const fn code(self) -> WatchdogCode {
         match self {
-            Self::RwxRegion => Some(WatchdogCode::RwxRegion),
-            Self::InlineHook => Some(WatchdogCode::HookDetected),
-            Self::ForeignThread | Self::ImageHollowing => None,
+            Self::RwxRegion => WatchdogCode::RwxRegion,
+            Self::InlineHook => WatchdogCode::HookDetected,
+            Self::ForeignThread => WatchdogCode::ForeignThread,
+            Self::ImageHollowing => WatchdogCode::ImageHollowing,
+            Self::LiveCodeModified => WatchdogCode::LiveCodeModified,
         }
     }
 }
@@ -249,6 +267,9 @@ pub struct ScanReport {
     pub threads_examined: usize,
     pub prologues_examined: usize,
     pub sections_examined: usize,
+    /// Registered live-code ranges looked at, and how many of them were still what was signed.
+    pub live_examined: usize,
+    pub live_verified: usize,
 }
 
 impl ScanReport {
@@ -341,8 +362,51 @@ pub fn analyze(snapshot: &Snapshot, expect: &Expectations, allow: &Allowlist) ->
         ..ScanReport::default()
     };
 
+    // Live code first: what it verifies is what the rules below may then treat as accounted for.
+    let mut verified: Vec<&AttestedRegion> = Vec::new();
+    for a in &expect.attested {
+        let answer = snapshot
+            .live
+            .iter()
+            .find(|d| d.base == a.base && d.size == a.size)
+            .map(|d| d.blake3);
+        let (certainty, detail) = match answer {
+            Some(Some(actual)) if actual == a.blake3 => {
+                verified.push(a);
+                continue;
+            }
+            Some(Some(_)) => (
+                Certainty::Confirmed,
+                format!(
+                    "no longer matches the digest it was signed with ({})",
+                    a.label()
+                ),
+            ),
+            Some(None) => (
+                Certainty::Suspicious,
+                format!(
+                    "could not be read where it was registered; retire it when it is freed ({})",
+                    a.label()
+                ),
+            ),
+            None => (
+                Certainty::Suspicious,
+                format!("the probe returned no digest for it ({})", a.label()),
+            ),
+        };
+        report.findings.push(ScanFinding {
+            kind: ScanKind::LiveCodeModified,
+            certainty,
+            subject: format!("{:#x} ({} bytes)", a.base, a.size),
+            detail,
+            allowed_because: None,
+        });
+    }
+    report.live_examined = expect.attested.len();
+    report.live_verified = verified.len();
+
     for region in &snapshot.regions {
-        if !region.protection.is_rwx() || expect.covers(region) {
+        if !region.protection.is_rwx() {
             continue;
         }
         let what = match region.kind {
@@ -350,11 +414,22 @@ pub fn analyze(snapshot: &Snapshot, expect: &Expectations, allow: &Allowlist) ->
             RegionKind::Mapped => "mapped",
             RegionKind::Private => "private",
         };
-        let found = finding(
+        let mut found = finding(
             ScanKind::RwxRegion,
             format!("{:#x} ({} bytes)", region.base, region.size),
             format!("readable, writable and executable {what} memory that SUL did not allocate"),
         );
+        // Inside a range whose bytes are still what was signed: allowed, and shown with the record that allows it.
+        if let Some(a) = verified
+            .iter()
+            .find(|a| region.base >= a.base && region.end() <= a.end())
+        {
+            found.detail =
+                format!("readable, writable and executable {what} memory inside signed live code");
+            found.allowed_because = Some(format!("signed live code ({})", a.label()));
+            report.allowed.push(found);
+            continue;
+        }
         let module = (region.kind == RegionKind::Image)
             .then_some(region.module.as_deref())
             .flatten();
@@ -362,6 +437,9 @@ pub fn analyze(snapshot: &Snapshot, expect: &Expectations, allow: &Allowlist) ->
     }
 
     for thread in &snapshot.threads {
+        if verified.iter().any(|a| a.contains(thread.start_address)) {
+            continue;
+        }
         let region = snapshot
             .regions
             .iter()
@@ -464,12 +542,14 @@ pub fn scan(
     expect: &Expectations,
     allow: &Allowlist,
 ) -> Result<ScanReport> {
-    Ok(analyze(&probe.snapshot()?, expect, allow))
+    let ranges: Vec<(u64, u64)> = expect.attested.iter().map(|a| (a.base, a.size)).collect();
+    Ok(analyze(&probe.snapshot(&ranges)?, expect, allow))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::live_code::Purpose;
 
     fn region(
         base: u64,
@@ -603,14 +683,14 @@ mod tests {
         assert_eq!(f.kind, ScanKind::RwxRegion);
         assert_eq!(f.certainty, Certainty::Suspicious);
         assert_eq!(f.subject, "0x3000 (8192 bytes)");
-        assert_eq!(f.kind.code(), Some(WatchdogCode::RwxRegion));
+        assert_eq!(f.kind.code(), WatchdogCode::RwxRegion);
         assert_eq!(report.regions_examined, 3);
     }
 
     #[test]
-    fn rwx_memory_sul_allocated_itself_is_not_reported_but_a_neighbour_is() {
+    fn rwx_memory_inside_verified_live_code_is_allowed_but_a_neighbour_is_reported() {
         let expect = Expectations {
-            own_rwx: vec![(0x10000, 0x4000)],
+            attested: vec![attested(0x10000, 0x4000, [1; 32])],
             ..Expectations::default()
         };
         let snapshot = Snapshot {
@@ -645,11 +725,14 @@ mod tests {
                     None,
                 ),
             ],
+            live: vec![digest_of(0x10000, 0x4000, Some([1; 32]))],
             ..Snapshot::default()
         };
         let report = analyze(&snapshot, &expect, &Allowlist::new());
         let subjects: Vec<_> = report.findings.iter().map(|f| f.subject.as_str()).collect();
         assert_eq!(subjects, ["0x13000 (8192 bytes)", "0x14000 (4096 bytes)"]);
+        let allowed: Vec<_> = report.allowed.iter().map(|f| f.subject.as_str()).collect();
+        assert_eq!(allowed, ["0x10000 (8192 bytes)", "0x12000 (8192 bytes)"]);
     }
 
     #[test]
@@ -802,7 +885,8 @@ mod tests {
             report
                 .findings
                 .iter()
-                .all(|f| f.kind == ScanKind::ForeignThread && f.kind.code().is_none())
+                .all(|f| f.kind == ScanKind::ForeignThread
+                    && f.kind.code() == WatchdogCode::ForeignThread)
         );
         assert!(report.findings[0].detail.contains("late.dll"));
         assert!(report.findings[4].detail.contains("not mapped"));
@@ -888,7 +972,7 @@ mod tests {
             "the folder is not kept"
         );
         assert!(f.detail.contains("a relative jump"));
-        assert_eq!(f.kind.code(), Some(WatchdogCode::HookDetected));
+        assert_eq!(f.kind.code(), WatchdogCode::HookDetected);
         assert_eq!(report.prologues_examined, 2);
     }
 
@@ -950,7 +1034,10 @@ mod tests {
         // More changed bytes than the section has is clamped, not a panic or an overflow.
         assert_eq!(kind(u64::MAX, 100), Some(ScanKind::ImageHollowing));
         assert_eq!(kind(u64::MAX, u64::MAX), Some(ScanKind::ImageHollowing));
-        assert_eq!(ScanKind::ImageHollowing.code(), None);
+        assert_eq!(
+            ScanKind::ImageHollowing.code(),
+            WatchdogCode::ImageHollowing
+        );
     }
 
     #[test]
@@ -1027,7 +1114,7 @@ mod tests {
 
     struct Fixed(Option<Snapshot>);
     impl ProcessProbe for Fixed {
-        fn snapshot(&mut self) -> Result<Snapshot> {
+        fn snapshot(&mut self, _digest_ranges: &[(u64, u64)]) -> Result<Snapshot> {
             self.0
                 .take()
                 .ok_or(sul_core::Error::Unsupported("no process to look at"))
@@ -1049,5 +1136,215 @@ mod tests {
         let report = scan(&mut probe, &Expectations::default(), &Allowlist::new()).unwrap();
         assert_eq!(report.findings.len(), 1);
         assert!(scan(&mut probe, &Expectations::default(), &Allowlist::new()).is_err());
+    }
+
+    // ---- live code (D-159) ----------------------------------------------------------------------------------------
+
+    fn attested(base: u64, size: u64, digest: [u8; 32]) -> AttestedRegion {
+        AttestedRegion {
+            serial: 3,
+            base,
+            size,
+            blake3: digest,
+            producer: "sul.exe".into(),
+            purpose: Purpose::HookTrampoline,
+            expires_unix: None,
+        }
+    }
+
+    fn digest_of(base: u64, size: u64, blake3: Option<[u8; 32]>) -> LiveDigest {
+        LiveDigest { base, size, blake3 }
+    }
+
+    fn rwx(base: u64, size: u64) -> Region {
+        region(
+            base,
+            size,
+            Protection::READ_WRITE_EXECUTE,
+            RegionKind::Private,
+            None,
+        )
+    }
+
+    #[test]
+    fn verified_live_code_is_allowed_and_shown_with_the_record_that_allows_it() {
+        let expect = Expectations {
+            attested: vec![attested(0x10000, 0x1000, [5; 32])],
+            ..Expectations::default()
+        };
+        let snapshot = Snapshot {
+            regions: vec![rwx(0x10000, 0x1000)],
+            live: vec![digest_of(0x10000, 0x1000, Some([5; 32]))],
+            ..Snapshot::default()
+        };
+        let report = analyze(&snapshot, &expect, &Allowlist::new());
+        assert!(report.is_clean(), "{report:?}");
+        assert_eq!((report.live_examined, report.live_verified), (1, 1));
+        assert_eq!(report.allowed.len(), 1);
+        let why = report.allowed[0].allowed_because.as_deref().unwrap();
+        assert!(
+            why.contains("serial 3") && why.contains("hook trampoline") && why.contains("sul.exe"),
+            "{why}"
+        );
+    }
+
+    #[test]
+    fn live_code_whose_bytes_changed_is_confirmed_and_loses_its_cover() {
+        let expect = Expectations {
+            attested: vec![attested(0x10000, 0x1000, [5; 32])],
+            ..Expectations::default()
+        };
+        let snapshot = Snapshot {
+            regions: vec![rwx(0x10000, 0x1000)],
+            live: vec![digest_of(0x10000, 0x1000, Some([6; 32]))],
+            ..Snapshot::default()
+        };
+        let report = analyze(&snapshot, &expect, &Allowlist::new());
+        assert_eq!((report.live_examined, report.live_verified), (1, 0));
+        assert!(
+            report.allowed.is_empty(),
+            "changed code is not accounted for"
+        );
+        let kinds: Vec<_> = report
+            .findings
+            .iter()
+            .map(|f| (f.kind, f.certainty))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                (ScanKind::RwxRegion, Certainty::Suspicious),
+                (ScanKind::LiveCodeModified, Certainty::Confirmed)
+            ]
+        );
+        let f = &report.findings[1];
+        assert_eq!(f.subject, "0x10000 (4096 bytes)");
+        assert!(f.detail.contains("no longer matches") && f.detail.contains("serial 3"));
+        assert_eq!(f.kind.code(), WatchdogCode::LiveCodeModified);
+    }
+
+    #[test]
+    fn live_code_that_cannot_be_read_or_was_not_digested_is_suspicious_not_a_pass() {
+        let expect = Expectations {
+            attested: vec![
+                attested(0x10000, 0x1000, [5; 32]),
+                attested(0x20000, 0x1000, [5; 32]),
+                attested(0x30000, 0x1000, [5; 32]),
+            ],
+            ..Expectations::default()
+        };
+        let snapshot = Snapshot {
+            live: vec![
+                digest_of(0x10000, 0x1000, None),
+                // A digest for the same address but another length is not an answer for this range.
+                digest_of(0x30000, 0x800, Some([5; 32])),
+            ],
+            ..Snapshot::default()
+        };
+        let report = analyze(&snapshot, &expect, &Allowlist::new());
+        assert_eq!((report.live_examined, report.live_verified), (3, 0));
+        assert_eq!(report.findings.len(), 3);
+        assert!(
+            report
+                .findings
+                .iter()
+                .all(|f| f.kind == ScanKind::LiveCodeModified
+                    && f.certainty == Certainty::Suspicious)
+        );
+        assert!(report.findings[0].detail.contains("could not be read"));
+        assert!(report.findings[1].detail.contains("no digest"));
+        assert!(report.findings[2].detail.contains("no digest"));
+    }
+
+    #[test]
+    fn signed_cover_is_not_stretched_by_a_region_that_runs_past_it() {
+        let expect = Expectations {
+            attested: vec![attested(0x10000, 0x1000, [5; 32])],
+            ..Expectations::default()
+        };
+        let snapshot = Snapshot {
+            regions: vec![
+                rwx(0x10000, 0x1000),
+                // The same allocation grown, or one that starts inside and runs out: neither is what was signed.
+                rwx(0x11000, 0x1000),
+                rwx(0x10800, 0x1000),
+            ],
+            live: vec![digest_of(0x10000, 0x1000, Some([5; 32]))],
+            ..Snapshot::default()
+        };
+        let report = analyze(&snapshot, &expect, &Allowlist::new());
+        let subjects: Vec<_> = report.findings.iter().map(|f| f.subject.as_str()).collect();
+        assert_eq!(subjects, ["0x10800 (4096 bytes)", "0x11000 (4096 bytes)"]);
+        assert_eq!(report.allowed.len(), 1);
+    }
+
+    #[test]
+    fn a_thread_may_start_in_verified_live_code_but_not_in_changed_live_code() {
+        let code = region(
+            0x10000,
+            0x1000,
+            Protection::READ_EXECUTE,
+            RegionKind::Private,
+            None,
+        );
+        let thread = Thread {
+            id: 9,
+            start_address: 0x10010,
+        };
+        let expect = Expectations {
+            attested: vec![attested(0x10000, 0x1000, [5; 32])],
+            ..Expectations::default()
+        };
+        let good = Snapshot {
+            regions: vec![code.clone()],
+            threads: vec![thread],
+            live: vec![digest_of(0x10000, 0x1000, Some([5; 32]))],
+            ..Snapshot::default()
+        };
+        assert!(analyze(&good, &expect, &Allowlist::new()).is_clean());
+        let bad = Snapshot {
+            live: vec![digest_of(0x10000, 0x1000, Some([6; 32]))],
+            ..good
+        };
+        let kinds: Vec<_> = analyze(&bad, &expect, &Allowlist::new())
+            .findings
+            .iter()
+            .map(|f| f.kind)
+            .collect();
+        assert_eq!(kinds, [ScanKind::ForeignThread, ScanKind::LiveCodeModified]);
+        // And without any registration the same thread is foreign, as before.
+        let none = analyze_default(&Snapshot {
+            regions: vec![code],
+            threads: vec![thread],
+            ..Snapshot::default()
+        });
+        assert_eq!(none.findings.len(), 1);
+    }
+
+    struct Capture(Vec<(u64, u64)>);
+    impl ProcessProbe for Capture {
+        fn snapshot(&mut self, digest_ranges: &[(u64, u64)]) -> Result<Snapshot> {
+            self.0 = digest_ranges.to_vec();
+            Ok(Snapshot::default())
+        }
+    }
+
+    #[test]
+    fn scan_tells_the_probe_exactly_which_ranges_to_digest() {
+        let expect = Expectations {
+            attested: vec![
+                attested(0x10000, 0x4000, [1; 32]),
+                attested(0x30000, 0x1000, [2; 32]),
+            ],
+            ..Expectations::default()
+        };
+        let mut probe = Capture(Vec::new());
+        let report = scan(&mut probe, &expect, &Allowlist::new()).unwrap();
+        assert_eq!(probe.0, [(0x10000, 0x4000), (0x30000, 0x1000)]);
+        // The probe gave nothing back, so neither range could be verified.
+        assert_eq!(report.findings.len(), 2);
+        let mut none = Capture(vec![(1, 1)]);
+        scan(&mut none, &Expectations::default(), &Allowlist::new()).unwrap();
+        assert!(none.0.is_empty());
     }
 }

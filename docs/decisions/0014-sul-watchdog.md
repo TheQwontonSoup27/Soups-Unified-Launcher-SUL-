@@ -89,3 +89,5 @@ Also found and fixed before any of the above: a test in `monitor.rs` that did no
 3. **What the installed product guards, and who signs the baseline,** wait for the installer and the update channel.
 4. **`HOLLOW_PERCENT` (25) and the 10-minute backstop** are starting values; measure before trusting them.
 5. **A signed checkpoint or the hive-mind's copy** is the only thing that would make the log's end tamper-evident.
+
+**Dated note, 2026-11-27 (decision 0015, D-158, D-159):** item 1 was answered by the owner ("do whatever is best for security, performance and speed"): Option A, with the two codes added, so the sentence above about "two of the four" no longer holds and `WatchdogCode` now has seven codes (two more for live code). Item 2 was confirmed. The text above is kept as it was written.

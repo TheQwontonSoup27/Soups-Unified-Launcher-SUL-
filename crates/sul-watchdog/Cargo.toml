@@ -26,3 +26,6 @@ notify.workspace = true
 tempfile = "3"
 # Tests only: they sign a baseline with a throwaway key. The production code never signs; it checks through `sul-trust`.
 ed25519-dalek.workspace = true
+# Tests only: one test hashes real bytes to prove the digest contract for live-code regions is BLAKE3-256. The production
+# code computes no BLAKE3: the Windows adapter's `RegionDigester` does, and this crate only compares 32 bytes (D-159).
+blake3.workspace = true

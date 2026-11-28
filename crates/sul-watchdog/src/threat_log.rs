@@ -176,6 +176,7 @@ mod tests {
             reason: Reason::HashMismatch,
             sha256: Some(format!("{n:064x}")),
             observed_unix: n,
+            why: None,
         }
     }
 

@@ -572,6 +572,14 @@ E\_WATCHDOG\_HOOK\_DETECTED	—	API hook in SUL's address space	Log, notify, opt
 
 E\_WATCHDOG\_RWX\_REGION	—	RWX region not mapped by SUL	Log, notify.
 
+E\_WATCHDOG\_FOREIGN\_THREAD	—	Thread in SUL's process starts outside every module loaded at the known-good point	Log, notify.
+
+E\_WATCHDOG\_IMAGE\_HOLLOWING	—	Loaded image's code replaced rather than patched	Log, notify.
+
+E\_WATCHDOG\_LIVE\_CODE\_MODIFIED	—	Signed live code no longer matches its record	Log, notify; the caller unloads the feature that owns the code.
+
+E\_WATCHDOG\_LIVE\_CODE\_REFUSED	—	Live-code record failed a signature, authority, order, producer or content check	Log, notify; nothing is registered.
+
 E\_DIAG\_BUNDLE\_WRITE\_FAILED	—	Zip write fails (disk full)	Log; user notified; partial bundle offered.
 
 

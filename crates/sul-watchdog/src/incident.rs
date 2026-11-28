@@ -9,6 +9,7 @@
 
 use crate::code::WatchdogCode;
 use crate::guard::{Deviation, PathDeviation};
+use crate::live_code::Refusal;
 use crate::scan::{ScanFinding, ScanKind};
 use serde::{Deserialize, Serialize};
 use sul_trust::findings::{Certainty, Finding};
@@ -26,6 +27,8 @@ pub enum Reason {
     InlineHook,
     ForeignThread,
     ImageHollowing,
+    LiveCodeModified,
+    LiveCodeRefused,
 }
 
 impl Reason {
@@ -40,6 +43,8 @@ impl Reason {
             Self::InlineHook => "inline_hook",
             Self::ForeignThread => "foreign_thread",
             Self::ImageHollowing => "image_hollowing",
+            Self::LiveCodeModified => "live_code_modified",
+            Self::LiveCodeRefused => "live_code_refused",
         }
     }
 }
@@ -69,6 +74,8 @@ pub struct Incident {
     /// A sentence for a person. May name the file; never goes into a [`ThreatRecord`].
     pub detail: String,
     pub observed_unix: u64,
+    /// For a refused live-code record: which check it failed (the closed list in [`Refusal`]).
+    pub refusal: Option<Refusal>,
 }
 
 impl Incident {
@@ -96,6 +103,7 @@ impl Incident {
             },
             detail: format!("{what} {} {}", d.path, d.deviation.describe()),
             observed_unix,
+            refusal: None,
         }
     }
 
@@ -105,9 +113,10 @@ impl Incident {
             ScanKind::InlineHook => Reason::InlineHook,
             ScanKind::ForeignThread => Reason::ForeignThread,
             ScanKind::ImageHollowing => Reason::ImageHollowing,
+            ScanKind::LiveCodeModified => Reason::LiveCodeModified,
         };
         Self {
-            code: f.kind.code(),
+            code: Some(f.kind.code()),
             specific_code: None,
             certainty: f.certainty,
             reason,
@@ -116,6 +125,28 @@ impl Incident {
             },
             detail: format!("{}: {}", f.subject, f.detail),
             observed_unix,
+            refusal: None,
+        }
+    }
+
+    /// A live-code record that was presented and refused (D-159). Certain when the signature, the key's purpose or the
+    /// memory's content was wrong; suspicious when it was stale, reordered or malformed (a restart does those too).
+    pub fn from_refusal(refusal: Refusal, observed_unix: u64) -> Self {
+        Self {
+            code: Some(WatchdogCode::LiveCodeRefused),
+            specific_code: None,
+            certainty: if refusal.is_certain() {
+                Certainty::Confirmed
+            } else {
+                Certainty::Suspicious
+            },
+            reason: Reason::LiveCodeRefused,
+            subject: Subject::Process {
+                what: "live-code record".into(),
+            },
+            detail: format!("live-code record refused: {}", refusal.describe()),
+            observed_unix,
+            refusal: Some(refusal),
         }
     }
 
@@ -136,6 +167,9 @@ impl Incident {
     pub fn to_record(&self) -> ThreatRecord {
         let (event, sha256) = match &self.subject {
             Subject::File { sha256, .. } => ("file_deviation", sha256.clone()),
+            Subject::Process { .. } if self.reason == Reason::LiveCodeRefused => {
+                ("live_code_refusal", None)
+            }
             Subject::Process { .. } => ("process_scan", None),
         };
         ThreatRecord {
@@ -146,12 +180,15 @@ impl Incident {
             reason: self.reason,
             sha256,
             observed_unix: self.observed_unix,
+            why: self.refusal,
         }
     }
 }
 
 /// One line of the threat log (Ch. 14 §14.13.5). Fields: what kind of event, which code, how sure, the one-word reason, the
-/// digest of the file when it is about a file, and when. Nothing else, on purpose.
+/// digest of the file when it is about a file, and when. Nothing else, on purpose. The one addition (D-159) is `why`, only on
+/// a refused live-code record: a value of the closed [`Refusal`] list, so it can carry no path and no sentence, and a line
+/// without it serialises as before, so the chain of an existing log is not disturbed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreatRecord {
     pub event: String,
@@ -161,6 +198,8 @@ pub struct ThreatRecord {
     pub reason: Reason,
     pub sha256: Option<String>,
     pub observed_unix: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<Refusal>,
 }
 
 #[cfg(test)]
@@ -283,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn a_scan_finding_becomes_a_process_incident_with_its_own_code_or_none() {
+    fn a_scan_finding_becomes_a_process_incident_with_its_own_code() {
         let mk = |kind| ScanFinding {
             kind,
             certainty: Certainty::Suspicious,
@@ -300,14 +339,79 @@ mod tests {
             Incident::from_scan(&mk(ScanKind::RwxRegion), 9).code,
             Some(WatchdogCode::RwxRegion)
         );
+        // Every detection has a code now (D-158, D-159); none is reported under a bare reason.
+        for (kind, code, reason) in [
+            (
+                ScanKind::ForeignThread,
+                WatchdogCode::ForeignThread,
+                Reason::ForeignThread,
+            ),
+            (
+                ScanKind::ImageHollowing,
+                WatchdogCode::ImageHollowing,
+                Reason::ImageHollowing,
+            ),
+            (
+                ScanKind::LiveCodeModified,
+                WatchdogCode::LiveCodeModified,
+                Reason::LiveCodeModified,
+            ),
+        ] {
+            let inc = Incident::from_scan(&mk(kind), 9);
+            assert_eq!((inc.code, inc.reason), (Some(code), reason));
+            assert_eq!(inc.to_finding().code, code.as_str());
+            assert_eq!(inc.to_record().code.as_deref(), Some(code.as_str()));
+        }
+    }
+
+    #[test]
+    fn a_refused_live_code_record_is_logged_with_its_closed_reason_and_nothing_else() {
+        use crate::live_code::Refusal;
+        let certain = Incident::from_refusal(Refusal::BadSignature, 7);
+        assert_eq!(certain.code, Some(WatchdogCode::LiveCodeRefused));
+        assert_eq!(certain.certainty, Certainty::Confirmed);
+        assert!(certain.detail.contains("signature"));
+        let rec = certain.to_record();
+        assert_eq!(rec.event, "live_code_refusal");
+        assert_eq!(rec.code.as_deref(), Some("E_WATCHDOG_LIVE_CODE_REFUSED"));
         assert_eq!(
-            Incident::from_scan(&mk(ScanKind::ForeignThread), 9).code,
-            None
+            (rec.confirmed, rec.reason, rec.why),
+            (true, Reason::LiveCodeRefused, Some(Refusal::BadSignature))
         );
         assert_eq!(
-            Incident::from_scan(&mk(ScanKind::ImageHollowing), 9).code,
-            None
+            serde_json::to_string(&rec).unwrap(),
+            r#"{"event":"live_code_refusal","code":"E_WATCHDOG_LIVE_CODE_REFUSED","specific_code":null,"confirmed":true,"reason":"live_code_refused","sha256":null,"observed_unix":7,"why":"bad_signature"}"#
         );
+        // A stale or reordered record is not certain: a restart does that.
+        for stale in [
+            Refusal::Expired,
+            Refusal::OutOfOrder,
+            Refusal::WrongRoot,
+            Refusal::UntrustedProducer,
+        ] {
+            let inc = Incident::from_refusal(stale, 7);
+            assert_eq!(inc.certainty, Certainty::Suspicious, "{stale:?}");
+            assert!(!inc.to_record().confirmed);
+        }
+        // A record that was refused for its content is certain, and says so.
+        assert_eq!(
+            Incident::from_refusal(Refusal::ContentMismatch, 7).certainty,
+            Certainty::Confirmed
+        );
+    }
+
+    /// The hash chain of an existing log must not move: a line without `why` serialises exactly as it did, and a line from
+    /// before `why` existed still reads.
+    #[test]
+    fn a_record_without_a_refusal_serialises_as_before_and_old_lines_still_read() {
+        let rec = Incident::from_deviation(&deviation(Deviation::Missing), 5).to_record();
+        let json = serde_json::to_string(&rec).unwrap();
+        assert!(!json.contains("why"), "{json}");
+        let old_line = r#"{"event":"file_deviation","code":"E_WATCHDOG_TAMPER","specific_code":"E_HELPER_TAMPER","confirmed":true,"reason":"file_missing","sha256":null,"observed_unix":5}"#;
+        assert_eq!(json, old_line);
+        let back: ThreatRecord = serde_json::from_str(old_line).unwrap();
+        assert_eq!(back.why, None);
+        assert_eq!(back, rec);
     }
 
     /// The privacy rule, tested the way it matters: put recognisable private text into every field an incident can carry
@@ -393,6 +497,8 @@ mod tests {
             Reason::InlineHook,
             Reason::ForeignThread,
             Reason::ImageHollowing,
+            Reason::LiveCodeModified,
+            Reason::LiveCodeRefused,
         ] {
             assert_eq!(
                 serde_json::to_string(&r).unwrap(),

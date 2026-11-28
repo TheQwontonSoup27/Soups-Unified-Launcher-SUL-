@@ -22,7 +22,7 @@
 //! Pass the monitor and the watcher the same root path (the same spelling): event paths are matched to the baseline by
 //! stripping that root from them.
 
-use crate::baseline::{Baseline, Role, Selection, key};
+use crate::baseline::{Baseline, Role, Selection, Watched, key};
 use crate::guard::{self, Deviation, PathDeviation};
 use notify::event::{AccessKind, AccessMode};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -140,6 +140,19 @@ pub enum Update {
     Restored { path: String },
 }
 
+/// How long a signed file may take to arrive after it was announced (D-159) before its absence is reported as tampering.
+pub const ANNOUNCE_TTL: Duration = Duration::from_secs(600);
+
+/// A file the baseline was told to expect, announced **before** it was written: the updater signs the new code, tells the
+/// watchdog (see [`Monitor::rebase`]) and then writes it, so the write is never a surprise. Until the file has arrived
+/// as signed, its absence (new file) or the old content still in place (replacement) is not a deviation.
+#[derive(Debug, Clone)]
+struct Announced {
+    /// The digest the baseline had for this path before the announcement, if it had one (a replacement, not a new file).
+    old_sha256: Option<String>,
+    since: Instant,
+}
+
 pub struct Monitor<S: ChangeSource> {
     root: PathBuf,
     baseline: Baseline,
@@ -149,6 +162,8 @@ pub struct Monitor<S: ChangeSource> {
     /// Deviations currently reported and not yet restored: path key -> (deviation, role, path as written).
     open: BTreeMap<String, (Deviation, Option<Role>, String)>,
     last_full: Instant,
+    announced: BTreeMap<String, Announced>,
+    announce_ttl: Duration,
 }
 
 fn rel_path(root: &Path, full: &Path) -> Option<String> {
@@ -177,7 +192,95 @@ impl<S: ChangeSource> Monitor<S> {
             config,
             open: BTreeMap::new(),
             last_full: Instant::now(),
+            announced: BTreeMap::new(),
+            announce_ttl: ANNOUNCE_TTL,
         }
+    }
+
+    /// As [`new`](Self::new) with another announcement window than [`ANNOUNCE_TTL`] (tests; a slow disk).
+    pub fn with_announce_ttl(mut self, ttl: Duration) -> Self {
+        self.announce_ttl = ttl;
+        self
+    }
+
+    /// Adopt a new effective baseline (the signed one plus attested live code, see [`crate::live_code`]) and check **only**
+    /// what it changed: a path that is new, whose digest or size differs, or that is no longer listed. Every added or
+    /// replaced path is announced: until the file is seen matching the new entry, a missing file (new path) or the old
+    /// content (replacement) is waited for, not reported; any **other** state, and anything still not right when
+    /// [`ANNOUNCE_TTL`] is up, is reported as usual. A deviation that was open and is now explained is restored.
+    pub fn rebase(&mut self, new: Baseline) -> Result<Vec<Update>> {
+        let old: BTreeMap<String, Watched> = self
+            .baseline
+            .entries
+            .iter()
+            .map(|e| (key(&e.path), e.clone()))
+            .collect();
+        let mut look_at: Vec<(String, String)> = Vec::new();
+        for entry in &new.entries {
+            let k = key(&entry.path);
+            let before = old.get(&k);
+            if before.is_none_or(|b| b.sha256 != entry.sha256 || b.size != entry.size) {
+                self.announced.insert(
+                    k.clone(),
+                    Announced {
+                        old_sha256: before.map(|b| b.sha256.clone()),
+                        since: Instant::now(),
+                    },
+                );
+                look_at.push((k, entry.path.clone()));
+            }
+        }
+        for (k, before) in &old {
+            if !new.entries.iter().any(|e| key(&e.path) == *k) {
+                self.announced.remove(k);
+                look_at.push((k.clone(), before.path.clone()));
+            }
+        }
+        self.baseline = new;
+        let mut out = Vec::new();
+        for (k, rel) in look_at {
+            let current = self.check_retrying(&rel);
+            self.record(k, current, &mut out);
+        }
+        Ok(out)
+    }
+
+    /// What an announcement says about what was just found at `path_key`: `None` means "nothing to report".
+    fn after_announcement(
+        &mut self,
+        path_key: &str,
+        current: Option<PathDeviation>,
+    ) -> Option<PathDeviation> {
+        let (old_sha256, expired) = match self.announced.get(path_key) {
+            Some(a) => (a.old_sha256.clone(), a.since.elapsed() >= self.announce_ttl),
+            None => return current,
+        };
+        if expired {
+            self.announced.remove(path_key);
+            return current;
+        }
+        match current {
+            // The file is there and is what was signed: the announcement has done its job.
+            None => {
+                self.announced.remove(path_key);
+                None
+            }
+            Some(d) => {
+                let waiting = match &d.deviation {
+                    Deviation::Missing => old_sha256.is_none(),
+                    Deviation::Modified { actual_sha256, .. } => {
+                        old_sha256.as_deref() == Some(actual_sha256.as_str())
+                    }
+                    _ => false,
+                };
+                if waiting { None } else { Some(d) }
+            }
+        }
+    }
+
+    /// The baseline the monitor is checking against right now (after any [`rebase`](Self::rebase)).
+    pub fn baseline(&self) -> &Baseline {
+        &self.baseline
     }
 
     /// Deviations that are open now (reported and not restored), in path order.
@@ -220,6 +323,7 @@ impl<S: ChangeSource> Monitor<S> {
     }
 
     fn record(&mut self, path_key: String, current: Option<PathDeviation>, out: &mut Vec<Update>) {
+        let current = self.after_announcement(&path_key, current);
         match current {
             Some(d) => {
                 let changed = self
@@ -386,6 +490,204 @@ mod tests {
             max_batch: Duration::from_millis(20),
             full_rescan_every: None,
         }
+    }
+
+    fn digest(bytes: &[u8]) -> String {
+        use sha2::{Digest, Sha256};
+        hex::encode(Sha256::digest(bytes))
+    }
+
+    /// `m`'s baseline with `path` added or replaced by an entry for `content`.
+    fn with_entry<S: ChangeSource>(m: &Monitor<S>, path: &str, content: &[u8]) -> Baseline {
+        let mut b = m.baseline.clone();
+        b.entries.retain(|e| e.path != path);
+        b.entries.push(Watched {
+            path: path.into(),
+            sha256: digest(content),
+            size: content.len() as u64,
+            role: Role::Binary,
+            artifact_code: None,
+        });
+        b.entries.sort_by_key(|e| key(&e.path));
+        b.validate().unwrap();
+        b
+    }
+
+    fn pump_for<S: ChangeSource>(m: &mut Monitor<S>) -> Vec<Update> {
+        m.pump(Duration::from_millis(1)).unwrap()
+    }
+
+    #[test]
+    fn a_new_signed_file_is_waited_for_not_reported_missing_and_then_checked_when_it_arrives() {
+        let f = fixture();
+        let new = f.change("bin/mod.dll");
+        let mut m = f.monitor(
+            vec![
+                vec![new.clone()],
+                vec![],
+                vec![new.clone()],
+                vec![],
+                vec![new],
+                vec![],
+            ],
+            quick(),
+        );
+        let b = with_entry(&m, "bin/mod.dll", b"new mod");
+        assert!(
+            m.rebase(b).unwrap().is_empty(),
+            "announced, not yet written: not missing"
+        );
+        assert!(m.open_deviations().is_empty());
+
+        // It arrives as signed: nothing to report, and the announcement is used up.
+        fs::write(f.root().join("bin/mod.dll"), b"new mod").unwrap();
+        assert!(pump_for(&mut m).is_empty());
+        assert!(m.announced.is_empty());
+
+        // From now on it is guarded like any other file: gone is Missing.
+        fs::remove_file(f.root().join("bin/mod.dll")).unwrap();
+        let updates = pump_for(&mut m);
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if d.deviation == Deviation::Missing),
+            "{updates:?}"
+        );
+    }
+
+    #[test]
+    fn a_new_file_that_arrives_with_the_wrong_content_is_reported_at_once() {
+        let f = fixture();
+        let new = f.change("bin/mod.dll");
+        let mut m = f.monitor(vec![vec![new], vec![]], quick());
+        let b = with_entry(&m, "bin/mod.dll", b"new mod");
+        m.rebase(b).unwrap();
+        fs::write(f.root().join("bin/mod.dll"), b"something else").unwrap();
+        let updates = pump_for(&mut m);
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if matches!(d.deviation, Deviation::Modified { .. }) && d.deviation.certainty() == sul_trust::findings::Certainty::Confirmed),
+            "{updates:?}"
+        );
+    }
+
+    #[test]
+    fn a_replacement_waits_for_the_new_content_and_a_later_return_to_the_old_one_is_caught() {
+        let f = fixture();
+        let helper = f.change("bin/helper.dll");
+        let mut m = f.monitor(
+            vec![
+                vec![helper.clone()],
+                vec![],
+                vec![helper.clone()],
+                vec![],
+                vec![helper.clone()],
+                vec![],
+                vec![helper],
+                vec![],
+            ],
+            quick(),
+        );
+        let b = with_entry(&m, "bin/helper.dll", b"a library v2");
+        // The old file is still in place: that is the state before the update, not tampering.
+        assert!(m.rebase(b).unwrap().is_empty());
+        assert!(
+            pump_for(&mut m).is_empty(),
+            "an event while the old content is still there"
+        );
+
+        fs::write(f.root().join("bin/helper.dll"), b"a library v2").unwrap();
+        assert!(pump_for(&mut m).is_empty());
+        assert!(m.announced.is_empty());
+
+        // Putting the old, signed-but-superseded version back is a rollback, and it is reported.
+        fs::write(f.root().join("bin/helper.dll"), b"a library").unwrap();
+        let updates = pump_for(&mut m);
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if matches!(d.deviation, Deviation::Modified { .. })),
+            "{updates:?}"
+        );
+
+        // A third content during the window is reported too.
+        let mut m2 = f.monitor(vec![vec![f.change("bin/helper.dll")], vec![]], quick());
+        fs::write(f.root().join("bin/helper.dll"), b"a library").unwrap();
+        let b2 = with_entry(&m2, "bin/helper.dll", b"a library v2");
+        m2.rebase(b2).unwrap();
+        fs::write(f.root().join("bin/helper.dll"), b"injected").unwrap();
+        let updates = pump_for(&mut m2);
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if matches!(d.deviation, Deviation::Modified { .. })),
+            "{updates:?}"
+        );
+    }
+
+    #[test]
+    fn a_replaced_file_that_disappears_while_its_update_is_awaited_is_reported_missing() {
+        let f = fixture();
+        let mut m = f.monitor(vec![vec![f.change("bin/helper.dll")], vec![]], quick());
+        let b = with_entry(&m, "bin/helper.dll", b"a library v2");
+        assert!(m.rebase(b).unwrap().is_empty());
+        // The old file may still be there, but it may not simply vanish: an update does not delete first.
+        fs::remove_file(f.root().join("bin/helper.dll")).unwrap();
+        let updates = pump_for(&mut m);
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if d.deviation == Deviation::Missing),
+            "{updates:?}"
+        );
+    }
+
+    #[test]
+    fn an_announcement_that_never_arrives_is_reported_once_its_time_is_up() {
+        let f = fixture();
+        let mut m = f.monitor(vec![], quick()).with_announce_ttl(Duration::ZERO);
+        let b = with_entry(&m, "bin/mod.dll", b"new mod");
+        let updates = m.rebase(b).unwrap();
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if d.deviation == Deviation::Missing),
+            "{updates:?}"
+        );
+        // And a replacement whose new file never came: the old content is reported.
+        let mut m2 = f.monitor(vec![], quick()).with_announce_ttl(Duration::ZERO);
+        let b2 = with_entry(&m2, "bin/helper.dll", b"a library v2");
+        let updates = m2.rebase(b2).unwrap();
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if matches!(d.deviation, Deviation::Modified { .. })),
+            "{updates:?}"
+        );
+    }
+
+    #[test]
+    fn a_rebase_that_explains_an_open_deviation_restores_it() {
+        let f = fixture();
+        let mut m = f.monitor(vec![], quick());
+        fs::write(f.root().join("sul.exe"), b"the program, patched").unwrap();
+        assert_eq!(m.session_start().unwrap().len(), 1);
+        let b = with_entry(&m, "sul.exe", b"the program, patched");
+        let updates = m.rebase(b).unwrap();
+        assert_eq!(
+            updates,
+            vec![Update::Restored {
+                path: "sul.exe".into()
+            }]
+        );
+        assert!(m.open_deviations().is_empty());
+    }
+
+    #[test]
+    fn dropping_an_entry_makes_the_file_unlisted_and_only_changed_paths_are_read() {
+        let f = fixture();
+        let mut m = f.monitor(vec![], quick());
+        // A model file that changed with no event: a rebase must not go and hash it.
+        fs::write(f.root().join("models/jarvis.gguf"), b"changed weights").unwrap();
+        let mut b = m.baseline.clone();
+        b.entries.retain(|e| e.path != "bin/helper.dll");
+        let updates = m.rebase(b).unwrap();
+        assert!(
+            matches!(&updates[..], [Update::Deviation(d)] if d.path == "bin/helper.dll" && matches!(d.deviation, Deviation::Unlisted { .. })),
+            "{updates:?}"
+        );
+        assert_eq!(
+            m.open_deviations().len(),
+            1,
+            "the model change was not looked at"
+        );
     }
 
     #[test]
